@@ -1,0 +1,605 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --ground: #0a0a12;
+  --ground-lighter: #14142a;
+  --phosphor: #39ff14;
+  --phosphor-dim: #1a8a0a;
+  --phosphor-glow: rgba(57, 255, 20, 0.15);
+  --coral: #ff4757;
+  --cyan: #4ecdc4;
+  --text: #c8c8d0;
+  --text-dim: #6a6a7a;
+  --scanline: rgba(0, 0, 0, 0.12);
+
+  /* 레이아웃 엔진이 JS에서 주입 */
+  --canvas-w: 480px;
+  --canvas-h: 360px;
+  --ui-unit: 12px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: "Courier New", Courier, monospace;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* CRT scanline */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, var(--scanline) 0px, var(--scanline) 1px, transparent 1px, transparent 3px);
+  pointer-events: none;
+  z-index: 41;
+}
+
+
+/* === 캔버스 (뷰포트 내 적응형 배치) === */
+.sprite-box {
+  position: fixed;
+  left: var(--sprite-left, 50%);
+  top: var(--sprite-top, 50%);
+  transform: translate(-50%, -50%);
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.08);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  touch-action: none;  /* 캔버스 입력: 길게 누름을 스크롤/확대로 가로채지 않게 */
+  background: var(--ground-lighter);
+  z-index: 42;
+  /* 드로어 .panel과 동일 커브/시간 — 같은 CSS transition 엔진이 양쪽을 구동하므로 동기화 */
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sprite-canvas {
+  display: block; width: 100%; height: 100%;
+}
+/* 인카운터 가이드 막대 오버레이 (비트 가이드 / NPC / INPUT) */
+.enc-bars {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+/* 필드 게이지 (js/field-gauge.js): 캔버스 상단 — 가이드 막대(rhythm/hud.js, 1280×960 논리: 폭 840 가운데·줄 높이 22·아래 여백 14)와 위아래 대칭
+   불투명도·채움 너비는 스크립트가 정한다 (처음 = 0 — 첫 게이지를 채우며 드러남) */
+.field-gauge {
+  position: absolute; left: 17.1875%; width: 65.625%; top: 1.4583%; height: 2.2917%;
+  background: rgba(16,14,36,0.85); overflow: hidden;
+  opacity: 0; pointer-events: none;
+}
+.field-gauge.hidden { display: none; }
+.field-gauge-fill { width: 0; height: 100%; background: #ffd700; }
+/* 홀드 미션 문구 (js/field-gauge.js — HOLD NOW! / KEEP HOLDING!): 게이지 바로 아래 가운데, 자리 표시 */
+.field-gauge-cue {
+  position: absolute; left: 0; right: 0; top: 4.5%; text-align: center;
+  color: #ffd700; font-weight: bold; letter-spacing: 2px;
+  font-size: calc(var(--ui-unit) * 1.2); text-shadow: 0 0 4px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+.field-gauge-cue.hidden { display: none; }
+
+/* 인카운터 임시 HUD (1단계: 텍스트) */
+.enc-hud {
+  position: absolute; left: 8px; right: 8px; top: 8px;
+  padding: 6px 10px; border-radius: 4px;
+  background: rgba(0,0,0,0.55); color: var(--phosphor);
+  font-size: calc(var(--ui-unit) * 1.0); line-height: 1.5; letter-spacing: 1px;
+  white-space: pre-wrap; pointer-events: none;
+}
+.enc-hud.hidden { display: none; }
+
+/* 카메라 화면 층 오버레이 (js/camera.js — 필드 캔버스 바로 위, 가이드 막대·게이지·HUD 아래): 레터박스·비네트 */
+.cam-overlay { position: absolute; inset: 0; pointer-events: none; transition-property: opacity, transform; transition-timing-function: ease-out; }
+.cam-letterbox::before, .cam-letterbox::after {
+  content: ''; position: absolute; left: 0; right: 0; height: var(--lb, 10%); background: #000;
+  transform: scaleY(0); transition: inherit;
+}
+.cam-letterbox::before { top: 0; transform-origin: top; }
+.cam-letterbox::after { bottom: 0; transform-origin: bottom; }
+.cam-letterbox.on::before, .cam-letterbox.on::after { transform: scaleY(1); }
+.cam-vignette { opacity: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,var(--vg, 0.55)) 100%); }
+.cam-vignette.on { opacity: 1; }
+.sprite-status {
+  position: absolute; bottom: 8px; right: 10px;
+  font-size: 9px; letter-spacing: 1px;
+  color: var(--phosphor-dim);
+  transition: opacity 0.6s;
+}
+
+/* === 드로어 토글 버튼 === */
+.drawer-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 18, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: var(--phosphor);
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+  padding: 0;
+  font-family: inherit;
+}
+.drawer-toggle:hover {
+  background: rgba(10, 10, 18, 0.9);
+  border-color: var(--phosphor-dim);
+}
+.drawer-toggle.active {
+  border-color: var(--phosphor);
+  box-shadow: 0 0 12px var(--phosphor-glow);
+}
+
+
+/* === 드로어 백드롭 (열렸을 때) === */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 40;
+  touch-action: manipulation;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* === 패널 드로어 === */
+.panel {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 18, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Landscape 드로어: 우측 슬라이드 */
+.panel.drawer-right {
+  top: 0;
+  right: 0;
+  width: clamp(240px, 28vw, 360px);
+  height: 100vh;
+  height: 100dvh;
+  padding: 56px 16px 24px;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0;
+  transform: translateX(100%);
+}
+.panel.drawer-right.open {
+  transform: translateX(0);
+}
+
+/* Portrait 드로어: 캔버스 하단부터 화면 끝까지 */
+.panel.drawer-bottom {
+  top: var(--drawer-top, 50%);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  padding: 16px 16px 32px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px 12px 0 0;
+  transform: translateY(100%);
+}
+.panel.drawer-bottom.open {
+  transform: translateY(0);
+}
+
+/* === 패널 내부 요소 === */
+
+/* Play area */
+.play-area {
+  width: 100%;
+  padding: calc(var(--ui-unit) * 1.5) calc(var(--ui-unit) * 1.2);
+  border: 1px solid var(--phosphor-dim); border-radius: 4px;
+  background: var(--ground-lighter); text-align: center;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  touch-action: none;
+}
+.play-area:hover { border-color: var(--phosphor); box-shadow: 0 0 16px var(--phosphor-glow); }
+.play-area:active, .play-area.active { border-color: var(--phosphor); box-shadow: 0 0 24px var(--phosphor-glow), inset 0 0 12px var(--phosphor-glow); }
+.play-label {
+  font-size: calc(var(--ui-unit) * 1.1);
+  color: var(--phosphor); letter-spacing: 2px; text-transform: uppercase; pointer-events: none;
+}
+.play-hint {
+  font-size: var(--ui-unit);
+  color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; pointer-events: none;
+  word-break: keep-all; overflow-wrap: break-word;
+}
+
+/* Play split (2-button) */
+.play-split {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.play-area--half {
+  flex: 1;
+  min-width: 0;
+}
+.play-area.hidden, .play-split.hidden { display: none; }
+
+/* 모드 전환 (단일 ↔ 분리) */
+.mode-toggle { width: 100%; }
+
+/* Feedback */
+.feedback {
+  font-size: calc(var(--ui-unit) * 1.2);
+  height: calc(var(--ui-unit) * 1.8);
+  color: var(--cyan); letter-spacing: 1px;
+}
+.feedback.tap-fb { color: var(--coral); }
+.feedback.hold-fb { color: var(--phosphor); }
+
+/* Original mode */
+.original-sound-summary {
+  background: var(--ground-lighter); border-radius: 4px; padding: 6px 10px; margin-bottom: 8px;
+  font-size: calc(var(--ui-unit) * 0.85);
+}
+.original-sound-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 2px 0; color: var(--text-dim);
+}
+.original-sound-status { font-size: 0.9em; }
+
+/* Threshold slider */
+.threshold-row {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--ui-unit);
+  color: var(--text-dim); letter-spacing: 1px;
+}
+.threshold-row label { white-space: nowrap; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.threshold-row input[type="range"] {
+  flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
+  background: var(--ground-lighter); border-radius: 2px; outline: none;
+}
+.threshold-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  background: var(--phosphor); border-radius: 2px; cursor: pointer;
+  border: none; box-shadow: 0 0 6px var(--phosphor-glow);
+}
+.threshold-val {
+  min-width: 42px; text-align: right; flex-shrink: 0;
+  color: var(--phosphor); font-variant-numeric: tabular-nums;
+}
+
+/* Controls */
+.ctrl-btn {
+  font-family: inherit;
+  font-size: var(--ui-unit);
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim); background: transparent; border: 1px solid var(--text-dim);
+  border-radius: 2px; padding: 4px 10px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+}
+.ctrl-btn:hover, .ctrl-btn:focus-visible { color: var(--cyan); border-color: var(--cyan); outline: none; }
+.ctrl-btn.active { color: var(--phosphor); border-color: var(--phosphor); }
+
+/* === 드로어 탭 바 === */
+.drawer-tabs {
+  display: flex;
+  gap: 0;
+  width: 100%;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 0;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.drawer-tab {
+  flex: 1;
+  font-family: inherit;
+  font-size: var(--ui-unit);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 0 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+}
+.drawer-tab:hover { color: var(--text); }
+.drawer-tab.active {
+  color: var(--phosphor);
+  border-bottom-color: var(--phosphor);
+}
+
+/* 드로어 바디: 탭 바 아래 남은 공간 전체 */
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 드로어 페이지 (조작 / 샘플 / 비트) */
+.drawer-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+.drawer-page.hidden, .sample-grid.hidden { display: none !important; }
+
+/* ── 스크롤 / 버튼 영역 분리 ── */
+
+/* 스크롤 영역: 콘텐츠 + 커스텀 스크롤바를 가로 배치 */
+.drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+}
+/* 콘텐츠: 네이티브 스크롤 숨김, 터치 스크롤 차단 */
+.drawer-scroll-content {
+  flex: 1;
+  overflow: hidden;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--ui-unit) * 1.1);
+  padding: 8px 14px;
+}
+/* 커스텀 스크롤 트랙: 별도 터치 영역 */
+.scroll-track {
+  width: 28px;
+  flex-shrink: 0;
+  background: var(--ground-lighter);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  position: relative;
+  touch-action: none;
+  cursor: pointer;
+}
+.scroll-thumb {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  min-height: 32px;
+  background: var(--phosphor-dim);
+  border-radius: 4px;
+  cursor: grab;
+  transition: background 0.1s;
+}
+.scroll-thumb:active, .scroll-thumb.dragging {
+  background: var(--phosphor);
+  cursor: grabbing;
+}
+
+/* 샘플 탭: 전체 높이에 스크롤 트랙 배치 */
+.sample-grid {
+  min-height: 0;
+}
+.sample-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+}
+/* 버튼 영역: 하단 고정, 스크롤 밖 */
+.drawer-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  background: rgba(10, 10, 18, 0.95);
+  touch-action: manipulation;
+}
+
+/* === 비트 페이지 === */
+.beat-patterns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+}
+/* 리듬 세션: 스테이지(계열)당 한 행 */
+#trialPatterns { flex-direction: column; }
+.beat-pattern-row {
+  display: flex;
+  gap: 4px;
+}
+.beat-pattern-btn {
+  font-family: inherit;
+  font-size: calc(var(--ui-unit) * 0.85);
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--text-dim);
+  border-radius: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  touch-action: manipulation;
+}
+.beat-pattern-btn:hover { color: var(--text); border-color: var(--text); }
+.beat-pattern-btn.active {
+  color: var(--phosphor);
+  border-color: var(--phosphor);
+  background: rgba(57, 255, 20, 0.06);
+}
+/* 클릭·터치 이펙트 (js/touch-fx.js) — 화면 위, 입력을 가로채지 않음 */
+.touch-fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10000; overflow: hidden; }
+.touch-fx {
+  position: absolute;
+  width: 26px; height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.touch-fx.up { animation: touch-fx-up 0.3s ease-out forwards; background: transparent; }
+@keyframes touch-fx-up { to { transform: scale(3); opacity: 0; } }
+
+/* 비트 탭 템포 고정 (스테이지 중 — BPM·곡·재생/정지를 바꿀 수 없음, 음색은 그대로) */
+#drawerBeat.tempo-locked #bgmBeats,
+#drawerBeat.tempo-locked #bgmSongs,
+#drawerBeat.tempo-locked .threshold-row,
+#drawerBeat.tempo-locked .beat-controls { opacity: 0.35; pointer-events: none; }
+
+/* 잠긴 항목 (비트 — 필드 보상으로 획득) */
+.beat-pattern-btn.locked { opacity: 0.4; border-style: dashed; cursor: default; }
+.beat-pattern-btn.locked:hover { color: var(--text-dim); border-color: var(--text-dim); }
+
+/* 볼륨 믹서 (설정 탭) */
+.mixer-rows { display: flex; flex-direction: column; gap: 10px; }
+.mixer-presets { margin-bottom: 12px; }
+.mixer-row { display: flex; flex-direction: column; gap: 2px; font-size: calc(var(--ui-unit) * 0.85); color: var(--text); }
+.mixer-head { display: flex; align-items: center; gap: 8px; }
+.mixer-head label { flex: 1; color: var(--text-dim); }
+.mixer-row input[type=range] { width: 100%; margin: 0; accent-color: var(--phosphor); }
+.mixer-val { width: 2.5em; text-align: right; color: var(--phosphor); }
+.mixer-mute { font-family: inherit; font-size: calc(var(--ui-unit) * 0.75); width: 3.2em; padding: 3px 0; color: var(--phosphor);
+  background: transparent; border: 1px solid var(--phosphor); border-radius: 2px; cursor: pointer; touch-action: manipulation; }
+.mixer-row.muted .mixer-val, .mixer-row.muted .mixer-mute { color: var(--text-dim); border-color: var(--text-dim); }
+.mixer-row.muted input[type=range] { opacity: 0.4; }
+
+/* 판정 창 (설정 탭) — 믹서 행 모양 재사용 */
+.config-section { margin-top: 22px; }
+.judge-sub { color: var(--text-dim); font-size: calc(var(--ui-unit) * 0.75); }
+.mixer-val.judge-val { width: auto; min-width: 4.2em; }
+.judge-note { margin-top: 8px; font-size: calc(var(--ui-unit) * 0.75); line-height: 1.5; color: var(--text-dim); }
+.judge-note .warn { color: #ff9500; }
+
+/* 비트 탭 재생기 (비트·BGM·음색 → BPM → 재생) */
+.bgm-group { margin-bottom: 10px; }
+.bgm-title { font-size: calc(var(--ui-unit) * 0.85); color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px; }
+
+.beat-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.beat-play.playing {
+  color: var(--phosphor) !important;
+  border-color: var(--phosphor) !important;
+}
+
+/* === 녹음 슬롯 (recorder 이식) === */
+.slot {
+  background: var(--ground-lighter); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+  padding: 12px; margin-bottom: 12px;
+}
+.slot-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; flex-shrink: 0;
+}
+.slot-name { font-weight: bold; font-size: 1.1em; }
+.slot-name .role { color: var(--text-dim); font-weight: normal; font-size: 0.85em; margin-left: 6px; }
+.slot-meta { color: var(--text-dim); font-size: 0.8em; }
+
+.slot-wave { flex-shrink: 0; }
+.waveform-wrap {
+  position: relative; width: 100%; height: 80px;
+  background: var(--ground); border-radius: 4px; overflow: hidden; margin-bottom: 8px;
+}
+.waveform-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+.slot-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.slot-controls button {
+  padding: 6px 0; border: none; border-radius: 4px; cursor: pointer;
+  font-size: 0.85em; color: #fff; width: 80px; text-align: center;
+  touch-action: manipulation;
+}
+.btn-listen { background: #2d6a4f; }
+.btn-listen:hover { background: #40916c; }
+.btn-record { background: #c0392b; }
+.btn-record:hover { background: #e74c3c; }
+.btn-record.recording { background: #e74c3c; animation: pulse 0.8s infinite alternate; }
+.btn-play { background: #2980b9; }
+.btn-play:hover { background: #3498db; }
+.btn-play:disabled { background: #444; cursor: default; }
+.btn-adopt { background: #8e44ad; }
+.btn-adopt:hover { background: #9b59b6; }
+.btn-adopt:disabled { background: #444; cursor: default; }
+.btn-adopt.adopted { background: #27ae60; }
+
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.6; } }
+
+.slot-status { color: var(--text-dim); font-size: 0.8em; margin-left: 8px; }
+
+.slot-sliders { width: 100%; }
+.xf-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8em; color: var(--text-dim);
+}
+.xf-row input[type="range"] { flex: 1; min-width: 60px; }
+
+.loop-info { color: #4caf50; font-size: 0.8em; margin-top: 4px; flex-shrink: 0; }
+
+.count-bar-wrap {
+  position: relative; width: 100%; height: 20px;
+  background: var(--ground); border-radius: 3px; margin-bottom: 4px; overflow: hidden;
+}
+.count-bar-wrap canvas { width: 100%; height: 100%; }
+
+.tab-bar {
+  display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid rgba(255,255,255,0.12);
+  flex-shrink: 0;
+}
+.tab-btn {
+  padding: 8px 0; border: none; background: transparent; color: var(--text-dim);
+  font-size: 0.85em; cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
+  width: 70px; text-align: center;
+  touch-action: manipulation;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: #fff; border-bottom-color: #e67e22; }
+.tab-btn .badge {
+  display: inline-block; margin-left: 4px;
+  border-radius: 8px; font-size: 0.7em; background: #444; color: #aaa;
+  width: 28px; height: 16px; line-height: 16px;
+  text-align: center; vertical-align: middle; overflow: hidden;
+}
+.tab-btn.active .badge { background: #e67e22; color: #fff; }
+.tab-btn .badge.done { background: #27ae60; color: #fff; }
+.offset-row { display: flex; }
+
+
+/* 버튼/슬라이더 포커스 차단 */
+button, input[type="range"] { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0s !important; }
+}

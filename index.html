@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>모아이 리듬 프로토타입</title>
+  <script>
+    var _v='?_='+Date.now();
+    document.write('<link rel="stylesheet" href="style.css'+_v+'">');
+  </script>
+</head>
+<body>
+
+<!-- 에셋 캔버스 (4:3, 뷰포트 중앙 최대화) -->
+<div class="sprite-box">
+  <canvas class="sprite-canvas" id="spriteCanvas"></canvas>
+  <div class="sprite-status" id="spriteStatus">LOADING</div>
+  <canvas class="enc-bars" id="encBars"></canvas>
+  <div class="field-gauge" id="fieldGauge"><div class="field-gauge-fill"></div></div>
+  <div class="field-gauge-cue hidden" id="fieldGaugeCue"></div>
+  <div class="enc-hud hidden" id="encHud"></div>
+</div>
+
+<!-- 드로어 토글 버튼 -->
+<button class="drawer-toggle" id="drawerToggle" title="설정">☰</button>
+
+<!-- 드로어 백드롭 -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+
+<!-- 컨트롤 패널 (드로어) -->
+<div class="panel" id="panel">
+
+  <!-- 드로어 탭 바 (고정) -->
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" data-drawer="control">조작</button>
+    <button class="drawer-tab" data-drawer="sample">샘플</button>
+    <button class="drawer-tab" data-drawer="beat">비트</button>
+    <button class="drawer-tab" data-drawer="config">설정</button>
+  </div>
+
+  <!-- 드로어 바디 (탭 바 아래 전체, flex: 1) -->
+  <div class="drawer-body">
+
+    <!-- ═══ 조작 ═══ -->
+    <div class="drawer-page" id="drawerControl">
+      <div class="drawer-scroll">
+        <div class="drawer-scroll-content">
+          <div class="original-sound-summary" id="originalSoundSummary">
+            <div class="original-sound-row" id="origSnd-doo"><span>Doo (뚜~)</span><span class="original-sound-status">—</span></div>
+            <div class="original-sound-row" id="origSnd-pah"><span>Pah (떽!)</span><span class="original-sound-status">—</span></div>
+            <div class="original-sound-row" id="origSnd-wop"><span>Wop (웡~)</span><span class="original-sound-status">—</span></div>
+          </div>
+          <div class="play-area" id="playOriginal">
+            <div class="play-label">터치 / 클릭 (C)</div>
+            <div class="play-hint">짧게 → 떽 &nbsp;│&nbsp; 길게 → 뚜우~엉</div>
+          </div>
+          <div class="play-split" id="playSplit">
+            <div class="play-area play-area--half" id="playOrigTap">
+              <div class="play-label">떽 (Z)</div>
+              <div class="play-hint">탭</div>
+            </div>
+            <div class="play-area play-area--half" id="playOrigHold">
+              <div class="play-label">뚜우~엉 (X)</div>
+              <div class="play-hint">홀드</div>
+            </div>
+          </div>
+          <button class="ctrl-btn mode-toggle" id="encAuto">AUTO: OFF (N)</button>
+          <button class="ctrl-btn mode-toggle" id="trialToggle">▶ 루프 테스트 (T)</button>
+          <button class="ctrl-btn mode-toggle" id="pingpongToggle">▶ 핑퐁 (P)</button>
+          <button class="ctrl-btn mode-toggle" id="missionToggle">게이지 미션: 받음 (M)</button>
+          <div class="beat-patterns" id="trialPatterns"></div>
+          <div class="feedback" id="feedback">&nbsp;</div>
+        </div>
+        <div class="scroll-track"><div class="scroll-thumb"></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ 샘플 (녹음) ═══ -->
+    <div class="drawer-page hidden sample-grid" id="drawerSample">
+      <div class="sample-main">
+        <div class="drawer-scroll-content" id="sampleScrollContent">
+          <div class="tab-bar" id="tabBar"></div>
+          <!-- 동적 요소 (header, wave, loopInfo)가 여기에 삽입됨 -->
+          <div class="drawer-actions" id="sampleSliders"></div>
+          <div class="drawer-actions" id="sampleActions"></div>
+        </div>
+        <div class="scroll-track" id="sampleTrack"><div class="scroll-thumb"></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ 비트 ═══ -->
+    <div class="drawer-page hidden" id="drawerBeat">
+      <div class="drawer-scroll">
+        <div class="drawer-scroll-content">
+          <!-- 재생기 하나: 비트(드럼만) · BGM 곡 → 음색 → BPM → 재생 (js/bgm.js) -->
+          <div class="bgm-title">비트</div>
+          <div class="beat-patterns bgm-group" id="bgmBeats"></div>
+          <div class="bgm-title">BGM</div>
+          <div class="beat-patterns bgm-group" id="bgmSongs"></div>
+          <div class="bgm-title">음색</div>
+          <div class="beat-patterns bgm-group" id="bgmThemes"></div>
+          <div class="threshold-row">
+            <label>BPM</label>
+            <input type="range" id="bgmBpm" min="60" max="200" value="105" step="1">
+            <span class="threshold-val" id="bgmBpmVal">105</span>
+          </div>
+          <div class="beat-controls">
+            <button class="ctrl-btn beat-play" id="bgmPlay">▶ PLAY</button>
+            <button class="ctrl-btn beat-stop" id="bgmStop">■ STOP</button>
+          </div>
+        </div>
+        <div class="scroll-track"><div class="scroll-thumb"></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ 설정 ═══ -->
+    <div class="drawer-page hidden" id="drawerConfig">
+      <div class="drawer-scroll">
+        <div class="drawer-scroll-content">
+          <div class="bgm-title">볼륨 믹서</div>
+          <div class="beat-patterns mixer-presets" id="mixerPresets"></div>
+          <div class="mixer-rows" id="mixerRows"></div>
+          <div class="beat-controls">
+            <button class="ctrl-btn" id="mixerReset">기본값</button>
+          </div>
+          <div class="bgm-title config-section">판정 창</div>
+          <div class="beat-patterns mixer-presets" id="judgeModes"></div>
+          <div class="beat-patterns mixer-presets" id="judgePresets"></div>
+          <div class="mixer-rows" id="judgeRows"></div>
+          <div class="judge-note" id="judgeNote"></div>
+          <div class="beat-controls">
+            <button class="ctrl-btn" id="judgeReset">기본값</button>
+          </div>
+        </div>
+        <div class="scroll-track"><div class="scroll-thumb"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- JS 모듈 (로드 순서 중요, 캐시 버스터 적용) — 데이터 파일(js/data/<이름>.js, 편집기가 씀 — docs/index/content.md)은 모듈보다 먼저 -->
+<script>var DATA = ['sky', 'patterns', 'missions', 'scenery', 'accessories', 'sound', 'voice'];
+document.write(DATA.map(function(n) { return 'js/data/' + n + '.js'; }).concat([
+  'js/state.js','js/data-store.js','js/gate.js','js/touch-fx.js','js/mixer.js','js/ui.js','js/audio.js',
+  'js/loudness.js','js/original.js','js/input.js','js/scene.js','js/layout.js','js/moai-anim.js','js/sprite.js','js/friends.js','js/frame.js','js/field-clock.js','js/tint.js','js/field-actors.js','js/field-events.js','js/field-gauge.js','js/rewards.js','js/scenery.js','js/accessories.js','js/sfx.js','js/fx.js','js/field-progress.js','js/voice-fx.js','js/possess.js','js/facing.js','js/camera.js',
+  'js/scroll-track.js','js/main.js',
+  'js/rhythm/init.js','js/rhythm/audio.js','js/rhythm/judge.js','js/rhythm/hud.js','js/rhythm/reveal.js','js/rhythm/bridge.js',
+  'js/rhythm/conductor.js','js/rhythm/core.js','js/rhythm/voices.js','js/rhythm/session.js','js/rhythm/bgm-player.js','js/bgm.js','js/field-rhythm.js','js/camera-rules.js','js/fx-rules.js','js/judge-config.js',
+  'js/recorder-bridge.js','js/recorder/dsp.js','js/recorder/draw.js',
+  'js/recorder/ui.js','js/recorder/playback.js','js/recorder/recorder.js','js/recorder/bake.js'
+]).concat(/[?&]layout\b/.test(location.search) ? ['js/layout-editor.js'] : [])  // 레이아웃 편집기 (개발용)
+.concat(/[?&]camera\b/.test(location.search) ? ['js/camera-lab.js'] : [])  // 카메라 시험 패널 (개발용 — 연출을 걸어 보고 고르기)
+.concat(/[?&]camtune\b/.test(location.search) ? ['js/camera-tuner.js'] : [])  // 카메라 값 조정 도구 (개발용 — 세션 샷의 배율·초점 비킴, 미니 일곱 세움)
+.concat(/[?&]sky\b/.test(location.search) ? ['js/editor-kit.js', 'js/sky-editor.js'] : [])  // 하늘 비주얼 풀 편집기 (콘텐츠 — docs/index/content.md)
+.concat(/[?&]patterns\b/.test(location.search) ? ['js/editor-kit.js', 'js/pattern-editor.js'] : [])  // 패턴 메이커 (콘텐츠)
+.concat(/[?&]missions\b/.test(location.search) ? ['js/editor-kit.js', 'js/mission-editor.js'] : [])  // 미션 편집기 (콘텐츠)
+.concat(/[?&]scenery\b/.test(location.search) ? ['js/editor-kit.js', 'js/scenery-editor.js'] : [])  // 배경 보상 편집기 (콘텐츠)
+.concat(/[?&]accessory\b/.test(location.search) ? ['js/editor-kit.js', 'js/accessory-editor.js'] : [])  // 악세사리 편집기 (콘텐츠)
+.concat(/[?&]soundtune\b/.test(location.search) ? ['js/editor-kit.js', 'js/sound-tuner.js'] : [])  // 사운드 보정 노브 (콘텐츠)
+.map(function(s){return '<script src="'+s+_v+'"><\/script>';}).join(''));</script>
+
+</body>
+</html>
