@@ -4,8 +4,15 @@ window.MoaiData = window.MoaiData || {};
 window.MoaiData["patterns"] = {
   "field": {
     "dooWop": "2222222222220000",
-    "quarterTaps": "1000100010001000",
-    "dooTap": "2222222200001000"
+    "quarterTaps": "1001000001001000",
+    "dooTap": "2222222200001000",
+    "islandMini1": "1001000010010000",
+    "islandMini2": "1001002010010000",
+    "islandMini3": "1001220010010000",
+    "islandMini4": "1001220010101000",
+    "islandMini5": "2201001022001000",
+    "islandMini6": "2201010220100100",
+    "islandMini7": "2201012201012010"
   },
   "mini": {
     "TAP1": "10100010100000001010000010000000",

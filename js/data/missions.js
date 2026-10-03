@@ -28,7 +28,7 @@ window.MoaiData["missions"] = {
           "points": 1
         },
         "patterns": [
-          "dooWop"
+          "quarterTaps"
         ]
       },
       "reward": "none"
@@ -40,7 +40,7 @@ window.MoaiData["missions"] = {
           "points": 1
         },
         "patterns": [
-          "quarterTaps"
+          "dooWop"
         ]
       },
       "reward": "none"
@@ -59,12 +59,96 @@ window.MoaiData["missions"] = {
     },
     {
       "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini1"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini2"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini3"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini4"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini5"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini6"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
+        "card": "loopClear",
+        "need": {
+          "points": 1
+        },
+        "patterns": [
+          "islandMini7"
+        ]
+      },
+      "reward": "mini"
+    },
+    {
+      "condition": {
         "card": "hold",
         "need": {
           "loops": 1
         }
       },
-      "reward": "mini",
+      "reward": "none",
       "repeat": "untilEmpty"
     }
   ],

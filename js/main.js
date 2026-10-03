@@ -76,6 +76,10 @@
 
     root.style.setProperty('--canvas-w', canvasW + 'px');
     root.style.setProperty('--canvas-h', canvasH + 'px');
+    root.style.setProperty('--field-cue-top', Math.round(canvasH * 0.05) + 'px');
+    root.style.setProperty('--field-cue-font-size', Math.round(canvasH * 0.06) + 'px');
+    root.style.setProperty('--field-cue-shadow-y', Math.max(1, Math.round(canvasH * 0.003)) + 'px');
+    root.style.setProperty('--field-cue-letter-spacing', Math.round(canvasH * 0.0023) + 'px');
     root.style.setProperty('--ui-unit', uiUnit + 'px');
     root.style.setProperty('--sprite-left', Math.round(vw / 2 + offsetX) + 'px');
     root.style.setProperty('--sprite-top', spriteTop + 'px');
@@ -162,6 +166,46 @@
     closeDrawer();
   }, { passive: false });
   backdrop.addEventListener('click', closeDrawer);
+
+  // 설정 탭의 전체 화면 토글
+  var fullscreenToggle = document.getElementById('fullscreenToggle');
+  function updateFullscreenToggle() {
+    var active = !!document.fullscreenElement;
+    fullscreenToggle.textContent = active ? '전체 화면 종료' : '전체 화면';
+    fullscreenToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  fullscreenToggle.addEventListener('click', function() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(function() {});
+      return;
+    }
+    if (!document.documentElement.requestFullscreen) {
+      fullscreenToggle.textContent = '전체 화면 미지원';
+      return;
+    }
+    document.documentElement.requestFullscreen().catch(function() {
+      fullscreenToggle.textContent = '전체 화면을 사용할 수 없음';
+    });
+  });
+  document.addEventListener('fullscreenchange', updateFullscreenToggle);
+
+  // 세션 HUD 표시 설정 (처음에는 끔, 이후 선택은 기기에 저장)
+  var sessionHudToggle = document.getElementById('sessionHudToggle');
+  var sessionHud = document.getElementById('encHud');
+  var showSessionHud = false;
+  try { showSessionHud = localStorage.getItem('moai-session-hud') === 'true'; } catch (e) {}
+  function updateSessionHudToggle() {
+    sessionHud.classList.toggle('hud-disabled', !showSessionHud);
+    sessionHudToggle.textContent = '세션 HUD: ' + (showSessionHud ? 'ON' : 'OFF');
+    sessionHudToggle.classList.toggle('active', showSessionHud);
+    sessionHudToggle.setAttribute('aria-pressed', showSessionHud ? 'true' : 'false');
+  }
+  sessionHudToggle.addEventListener('click', function() {
+    showSessionHud = !showSessionHud;
+    updateSessionHudToggle();
+    try { localStorage.setItem('moai-session-hud', String(showSessionHud)); } catch (e) {}
+  });
+  updateSessionHudToggle();
 
   // ── 드로어 탭 전환 (조작 / 샘플 / 비트 / 설정) ──
   var drawerTabs = document.querySelectorAll('.drawer-tab');

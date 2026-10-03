@@ -94,6 +94,11 @@
   var ppBtn = document.getElementById('pingpongToggle');
   var patBox = document.getElementById('trialPatterns');
   var hud = document.getElementById('encHud');
+  var lives = document.getElementById('sessionLives');
+  var status = document.getElementById('sessionStatus');
+  var steps = document.getElementById('sessionSteps');
+  var renderedSteps = null;
+  var renderedChances = null;
 
   var loopId = null;
   var schedule = [];          // 패턴 전환 예약 [{ from: 단위 번호, entry, manual }] — from 오름차순
@@ -402,7 +407,47 @@
     for (var i = 0; i < CHANCES; i++) t += i < chances ? '♥' : '♡';
     return t;
   }
+  function renderLives() {
+    if (!lives) return;
+    var visible = M.sessionActive && mode === 'pingpong';
+    if (status) status.classList.toggle('hidden', !visible);
+    if (!visible) { renderedChances = null; renderedSteps = null; return; }
+    if (renderedChances !== chances) {
+      while (lives.firstChild) lives.removeChild(lives.firstChild);
+      for (var i = 0; i < CHANCES; i++) {
+        var heart = document.createElement('span');
+        heart.className = 'session-heart ' + (i < chances ? 'full' : 'empty');
+        heart.textContent = '♥';
+        heart.setAttribute('aria-hidden', 'true');
+        lives.appendChild(heart);
+      }
+      renderedChances = chances;
+    }
+    lives.setAttribute('aria-label', '남은 기회: ' + chances);
+  }
 
+  function renderSteps() {
+    if (!steps || !status) return;
+    var visible = M.sessionActive && mode === 'pingpong';
+    if (!visible) { renderedSteps = null; return; }
+    var family = familyOf(selectedId), progress = '';
+    for (var i = 1; i <= STAGE_COUNT; i++) progress += cleared[family + i] ? '1' : '0';
+    var key = family + ':' + progress;
+    if (key === renderedSteps) return;
+    while (steps.firstChild) steps.removeChild(steps.firstChild);
+    var completed = 0;
+    for (var j = 1; j <= STAGE_COUNT; j++) {
+      var done = !!cleared[family + j];
+      if (done) completed++;
+      var mark = document.createElement('span');
+      mark.className = 'session-step ' + (done ? 'done' : 'pending');
+      mark.textContent = done ? '✓' : '□';
+      mark.setAttribute('aria-hidden', 'true');
+      steps.appendChild(mark);
+    }
+    steps.setAttribute('aria-label', '완료 단계: ' + completed + ' / ' + STAGE_COUNT);
+    renderedSteps = key;
+  }
   function renderHud(unit) {
     if (!hud) return;
     if (unit < 0) unit = 0;               // 시계 시작 전(시작 지연 50ms) = 첫 단위로 표시
@@ -442,7 +487,9 @@
 
   // ── 프레임 루프 ──
   function frame() {
-    if (!M.sessionActive) { loopId = null; return; }
+    if (!M.sessionActive) { renderLives(); loopId = null; return; }
+    renderLives();
+    renderSteps();
     if (phase === 'wait') { renderWait(); loopId = requestAnimationFrame(frame); return; }   // 진입 대기 · 시작 경계 대기
     if (startReq) { loopId = requestAnimationFrame(frame); return; }   // 시작 시각 대기 중
     var now = G.actx.currentTime;
@@ -594,6 +641,7 @@
     C.stop();
     C.reset();
     M.sessionActive = false;
+    renderLives();
     if (npcDoo) { V.dooStop(npcDoo, C.when('now')); npcDoo = null; }
     releasePerformers();
     sessionFamily = null;

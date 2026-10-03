@@ -9,6 +9,7 @@
   const frames = {};       // name → Image
   let loaded = 0;
   let ready = false;
+  let mainRenderAnnounced = false;
   let spriteCtx = null;
   let currentFrame = 'idle';
   let animId = null;        // rAF id
@@ -111,6 +112,12 @@
     }
 
     currentFrame = name;
+    if (!mainRenderAnnounced) {
+      mainRenderAnnounced = true;
+      document.dispatchEvent(new CustomEvent('moai:main-rendered'));
+      const cover = document.getElementById('spriteLoadingCover');
+      if (cover) cover.classList.add('dismissed');
+    }
   }
 
   // 모아이 높이 조정 (임시 조작) — ↑/↓ 누르는 동안 연속 이동, 떼면 정지. 0~100% (layout.js M.MOAI_HEIGHT)

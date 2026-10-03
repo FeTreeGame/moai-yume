@@ -67,6 +67,13 @@ body::after {
 .sprite-canvas {
   display: block; width: 100%; height: 100%;
 }
+.sprite-loading-cover {
+  position: absolute; inset: 0; z-index: 10;
+  background: var(--ground-lighter);
+  opacity: 1; pointer-events: none;
+  transition: opacity 0.6s ease-out;
+}
+.sprite-loading-cover.dismissed { opacity: 0; }
 /* 인카운터 가이드 막대 오버레이 (비트 가이드 / NPC / INPUT) */
 .enc-bars {
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -84,12 +91,15 @@ body::after {
 .field-gauge-fill { width: 0; height: 100%; background: #ffd700; }
 /* 홀드 미션 문구 (js/field-gauge.js — HOLD NOW! / KEEP HOLDING!): 게이지 바로 아래 가운데, 자리 표시 */
 .field-gauge-cue {
-  position: absolute; left: 0; right: 0; top: 4.5%; text-align: center;
-  color: #ffd700; font-weight: bold; letter-spacing: 2px;
-  font-size: calc(var(--ui-unit) * 1.2); text-shadow: 0 0 4px #000, 0 0 2px #000;
+  position: absolute; left: 0; right: 0; top: var(--field-cue-top, 5px); text-align: center;
+  color: rgba(255, 120, 149, 1); font-weight: bold; letter-spacing: var(--field-cue-letter-spacing, 2px);
+  font-size: var(--field-cue-font-size, 22px);
+  text-shadow: 0 var(--field-cue-shadow-y, 2px) 0 rgba(0, 0, 0, 0.6);
+  opacity: 0;
   pointer-events: none;
 }
 .field-gauge-cue.hidden { display: none; }
+.field-gauge-cue.cue-ready { opacity: 1; }
 
 /* 인카운터 임시 HUD (1단계: 텍스트) */
 .enc-hud {
@@ -114,6 +124,7 @@ body::after {
 .cam-vignette.on { opacity: 1; }
 .sprite-status {
   position: absolute; bottom: 8px; right: 10px;
+  z-index: 11;
   font-size: 9px; letter-spacing: 1px;
   color: var(--phosphor-dim);
   transition: opacity 0.6s;
@@ -511,6 +522,58 @@ body::after {
   gap: 8px;
   margin-top: 10px;
 }
+.fullscreen-controls { margin-top: 0; margin-bottom: 16px; }
+.fullscreen-controls .ctrl-btn { flex: 1; }
+.session-hud-controls { margin-top: 0; margin-bottom: 16px; }
+.session-hud-controls .ctrl-btn { flex: 1; }
+.enc-hud.hud-disabled { display: none; }
+.session-status {
+  position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+}
+.session-status.hidden { display: none; }
+.completion-crowns {
+  position: absolute; inset: 0; z-index: 4;
+  pointer-events: none;
+}
+.completion-crowns.hidden { display: none; }
+.completion-crown {
+  position: absolute; top: calc(var(--canvas-h) * 0.0114);
+  width: calc(var(--canvas-h) * 0.14); height: calc(var(--canvas-h) * 0.14);
+  overflow: visible;
+  filter: drop-shadow(0 0 calc(var(--canvas-h) * 0.008) rgba(255,220,100,0.9));
+  transform-origin: center;
+  animation: completion-crown-pulse 5s ease-in-out infinite;
+  transition: transform 0.45s ease;
+}
+.completion-crown.crown-left { left: calc(var(--canvas-h) * 0.0333); }
+.completion-crown.crown-right { right: calc(var(--canvas-h) * 0.0333); }
+@keyframes completion-crown-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.session-lives, .session-steps {
+  position: absolute; top: 95.9375%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: calc(var(--canvas-h) * 0.0083);
+}
+.session-lives { right: calc(var(--canvas-h) * 0.0333); }
+.session-steps { left: calc(var(--canvas-h) * 0.0333); }
+.session-heart, .session-step {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: calc(var(--canvas-h) * 0.05); height: calc(var(--canvas-h) * 0.05);
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
+  font-size: calc(var(--canvas-h) * 0.0556); line-height: calc(var(--canvas-h) * 0.05);
+}
+.session-heart.full {
+  color: #ff405b;
+  text-shadow: 0 0 5px rgba(255,64,91,0.55);
+}
+.session-heart.empty {
+  color: rgba(20,12,16,0.9);
+  -webkit-text-stroke: 0.8px rgba(255,100,120,0.72);
+}
+.session-step.pending { color: rgba(166,255,130,0.28); }
+.session-step.done { color: #a6ff82; text-shadow: 0 0 5px rgba(166,255,130,0.65); }
 .beat-play.playing {
   color: var(--phosphor) !important;
   border-color: var(--phosphor) !important;
@@ -602,4 +665,5 @@ button, input[type="range"] { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0s !important; }
+  .completion-crown { animation: none !important; }
 }

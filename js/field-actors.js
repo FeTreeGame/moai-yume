@@ -70,7 +70,7 @@
   };
   // 등장: 첫 등장(초 — 등장을 켠 때부터), 다음 등장까지 간격(초, 무작위 — 등장마다), 떠다니는 것의 동시 수, 뽑기 가중치
   //   등장을 켜고 끄는 것은 밖에서 (spawning(on) — 언제부터 나올지는 연결표 js/field-events.js). 끄면 새로 나오지 않을 뿐, 떠 있는 것은 그대로 지나감
-  const SPAWN = { first: 2, gap: [3, 7], max: 3, pool: { balloon: 1, banner: 1 } };
+  const SPAWN = { first: 2, gap: [3, 7], max: 3, pool: { balloon: 1 } };
   // 새싹 계열 색: 무지개 보라 → 빨강 (계열 순서대로. 종착지 무지개와 매칭 — 난이도 표시)
   const RAINBOW = ['#8e44ad', '#3f51b5', '#1e88e5', '#43a047', '#fdd835', '#fb8c00', '#e53935'];
   // 낙하: 가속(높이 비/초²), 머묾·사라짐(초), 심도 — 터지면 모아이(5)·전경(6) 앞 (누름 우선권이 인스턴스에 있으니 보이는 순서도 앞,
@@ -79,6 +79,25 @@
   const DROP = { gravity: 0.9, linger: 1.5, fade: 0.5, z: 6.5, depth: 0.05, captionLinger: 2.5 };   // captionLinger = 자막이 있으면 머묾(초)
   // 성장: 이 모드의 결과로만 자람, 완수 단계(핑퐁 계열 단계 수), 완수 뒤 사라짐(초)
   const GROW = { modes: ['pingpong'], full: 3, bloomFade: 0.8 };
+  const MINI_STAR = { v: 0.81, size: 0.05, gap: 0.004, rise: 0.04, shiftX: 0.01, fade: 0.5 };
+  const crownHud = document.getElementById('completionCrowns');
+  let crownPreview = false;
+  let allClearAnnounced = false;
+  function allMiniComplete() {
+    const families = M.session && M.session.families ? M.session.families() : [];
+    return families.length > 0 && families.every(function(stage) {
+      return actors.some(function(a) { return a.kind === 'mini' && a.stage === stage && a.level >= GROW.full; });
+    });
+  }
+  function updateCrownHud() {
+    if (!crownHud) return;
+    const complete = allMiniComplete();
+    crownHud.classList.toggle('hidden', !complete && !crownPreview);
+    if (complete && !allClearAnnounced) {
+      allClearAnnounced = true;
+      document.dispatchEvent(new CustomEvent('moai:field-clear'));
+    }
+  }
   // 영역 표시: show = 'always'(늘 보임) | 'never' — 이후 조건(예: 홀드 중)으로 바꿀 자리. alpha = 자리 표시 채움
   const ZONE = { show: 'never', alpha: 0.7 };   // 기준 원은 숨김 (자리 잡기 끝 — 미니 모아이가 그 자리에 섬)
   const HIT_SCALE = 0.8;             // 뗀 자리 판정 = 그린 사각형의 이 비율 (이미지 여백 보정) — 종류에 hit: 'moai'가 있으면 모아이 판정 사각형
@@ -534,12 +553,21 @@
   // ── 성장 (스테이지 결과) ──
   function grow(d) {
     if (GROW.modes.indexOf(d.mode) < 0) return;
+    let fadeStars = false;
     actors.forEach(function(a) {
       if (a.kind === 'mini' && a.stage === d.family) {   // 미니 모아이: 계열 진행만 (모습 변화는 아직 없음)
         const g = gardenOf(a.stage), mlv = Math.max(g.level, d.highest || 0);
         if (mlv <= g.level) return;
+        const awardStar = d.reason === 'clear' && d.highest >= GROW.full && a.level < GROW.full;
         g.level = a.level = mlv;
-        if (mlv >= GROW.full) g.done = true;
+        if (mlv >= GROW.full) {
+          g.done = true;
+          if (awardStar && a.starAlpha === undefined) {
+            a.starAlpha = 0;
+            a.starFadeStart = performance.now() / 1000;
+            fadeStars = true;
+          }
+        }
         emit('grow', a);
         return;
       }
@@ -552,7 +580,24 @@
       emit('grow', a);
       if (lv >= GROW.full) { gardenOf(a.stage).done = true; a.state = 'bloom'; a.left = GROW.bloomFade; emit('bloom', a); wake(); }
     });
+    if (fadeStars) {
+      if (M.frame) M.frame.add(stepMiniStarFade);
+      else actors.forEach(function(a) { if (a.starFadeStart !== undefined) { a.starAlpha = 1; a.starFadeStart = undefined; } });
+    }
+    updateCrownHud();
     redraw();
+  }
+  function stepMiniStarFade(t) {
+    let active = false;
+    actors.forEach(function(a) {
+      if (a.kind !== 'mini') return;
+      if (a.starFadeStart !== undefined) {
+        a.starAlpha = Math.min(1, Math.max(0, (t - a.starFadeStart) / MINI_STAR.fade));
+        if (a.starAlpha < 1) active = true;
+        else a.starFadeStart = undefined;
+      }
+    });
+    return active;
   }
 
   // ── 세션 (session.js 'moai:session') ──
@@ -592,9 +637,49 @@
     else if (look.img && loaded(imgs[a.kind])) M.drawAt(ctx, tintOf(look, a, imgs[a.kind]), a.p, asp, W, H);   // 그 프레임이 로드 전이면 대기 모습
     else if (look.draw) look.draw(ctx, M.placedRect(a.p, asp, W, H), a);
     else drawPlaceholder(ctx, M.placedRect(a.p, asp, W, H), look, a);
+    if (a.kind === 'mini' && a.level >= GROW.full) drawMiniStar(ctx, a, asp, W, H);
     if (clip) { ctx.restore(); if (MINI.mask.outline) drawMaskOutline(ctx, clip, a.color); }
     if (a.caption) drawCaption(ctx, M.placedRect(boxOf(a), asp, W, H), a.caption);
     if (a.alpha < 1) ctx.restore();
+  }
+  function drawMiniStar(ctx, a, asp, W, H) {
+    const r = M.placedRect(a.p, asp, W, H);
+    const u = a.p.flip ? 0 : 0.7;
+    const dx = (u - 0.5) * r.dw * (a.p.flip ? -1 : 1);
+    const dy = (MINI_STAR.v - 0.5) * r.dh;
+    const c = Math.cos(r.rot), s = Math.sin(r.rot);
+    const x = r.cx + dx * c - dy * s - W * MINI_STAR.shiftX;
+    const hitBottomY = r.cy + dx * s + dy * c;
+    const outer = H * MINI_STAR.size / 2;
+    const y = hitBottomY + outer + H * (MINI_STAR.gap - MINI_STAR.rise);
+    const alpha = a.starAlpha === undefined ? 1 : a.starAlpha;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(x, y);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      const radius = i % 2 === 0 ? outer : outer * 0.46;
+      const px = Math.cos(angle) * radius, py = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = a.color || '#fff';
+    ctx.shadowColor = a.color || '#fff';
+    ctx.shadowBlur = H * 0.01;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = Math.max(1, H * 0.002);
+    ctx.strokeStyle = mixWithWhite(a.color || '#fff');
+    ctx.stroke();
+    ctx.restore();
+  }
+  function mixWithWhite(color) {
+    const match = /^#([0-9a-f]{6})$/i.exec(color);
+    if (!match) return '#fff';
+    const value = parseInt(match[1], 16);
+    const r = (value >> 16) & 255, g = (value >> 8) & 255, b = value & 255;
+    return 'rgb(' + Math.round((r + 255) / 2) + ',' + Math.round((g + 255) / 2) + ',' + Math.round((b + 255) / 2) + ')';
   }
   function tintOf(look, a, img) { return (look.tint && a.color && M.tinted && M.tinted(img, a.color)) || img; }
   // 마스크 테두리 (조정용): 계열 색 실선 + 흰 점선
@@ -646,6 +731,8 @@
   }
 
   M.fieldActors = {
+    complete: allMiniComplete,
+    completionPreview: function() { return crownPreview; },
     // 그릴 층 — sprite.js가 모아이·친구와 합쳐 심도 순으로 그린다 (세션 중엔 'keep' 종류만)
     layers: function() {
       if (MINI.show === 'all' && !minisPlaced) placeMinis();   // 계열 순서(세션 모듈)가 준비된 뒤 첫 그리기에서
@@ -709,6 +796,13 @@
   });
   document.addEventListener('moai:stage-result', function(e) { grow(e.detail); });
   document.addEventListener('moai:session', function(e) { onSession(!!e.detail.active, e.detail.family); });
+  document.addEventListener('keydown', function(e) {
+    if (e.code !== 'F8' || e.repeat) return;
+    e.preventDefault();
+    crownPreview = !crownPreview;
+    updateCrownHud();
+    document.dispatchEvent(new CustomEvent('moai:completion-preview'));
+  });
 
   scheduleSpawn(SPAWN.first);
 })();

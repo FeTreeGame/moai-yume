@@ -99,20 +99,25 @@
     judges: function() { return evaluating() && started(); },   // 입력: 평가 중이면 판정 — 평가 첫 박의 판정 창부터 (쉼·드러내는 루프는 친 위치만)
     marks: function() { return !!tl; },                  // 아니면 친 위치만 (박 시계가 있을 때)
   };
-  let callDoo = null, callOut = null;
+  let callDoo = null, callOut = null, skippedCallTick = -1;
   function callStop(t) { if (callDoo && G.voices) { G.voices.dooStop(callDoo, t != null ? t : G.actx.currentTime); } callDoo = null; }
+  function callAt(tick, time) {
+    if (!CALL.on || !evaluating() || !G.voices) return;
+    const unit = Math.floor(tick / LEN);
+    if (!(unit === revealUnit || (CALL.repeat === 'everyLoop' && unit >= startUnit))) return;
+    if (!callOut || callOut.context !== G.actx) { callOut = G.actx.createGain(); callOut.connect(G.noteSfxOut); }
+    callOut.gain.value = CALL.gain;
+    const cells = patternAt(unit === revealUnit ? startUnit * LEN : tick), c = tick - unit * LEN;
+    const v = cells[c] || 0, pv = c > 0 ? cells[c - 1] || 0 : 0;
+    if (v !== 2 && pv === 2 && callDoo) { callStop(time); G.voices.wop(time, callOut); }
+    if (v === 2 && pv !== 2) callDoo = G.voices.dooStart(time, callOut);
+    if (v === 1) G.voices.pah(time, callOut);
+  }
   const callFeed = {
     onTick: function(tick, time) {
-      if (!CALL.on || !evaluating() || !G.voices) return;
-      const unit = Math.floor(tick / LEN);
-      if (!(unit === revealUnit || (CALL.repeat === 'everyLoop' && unit >= startUnit))) return;
-      if (!callOut || callOut.context !== G.actx) { callOut = G.actx.createGain(); callOut.connect(G.noteSfxOut); }
-      callOut.gain.value = CALL.gain;
-      const cells = patternAt(unit === revealUnit ? startUnit * LEN : tick), c = tick - unit * LEN;
-      const v = cells[c] || 0, pv = c > 0 ? cells[c - 1] || 0 : 0;
-      if (v !== 2 && pv === 2 && callDoo) { callStop(time); G.voices.wop(time, callOut); }
-      if (v === 2 && pv !== 2) callDoo = G.voices.dooStart(time, callOut);
-      if (v === 1) G.voices.pah(time, callOut);
+      if (!evaluating()) { skippedCallTick = tick; return; }
+      skippedCallTick = -1;
+      callAt(tick, time);
     },
   };
   const feed = G && G.core ? G.core.judgeFeed(function(tick) { return evaluating() && Math.floor(tick / LEN) >= startUnit; }, patternAt) : null;
@@ -139,6 +144,7 @@
     if (tl && feed) tl.removeChannel(feed);
     if (tl) tl.removeChannel(callFeed);
     callStop();
+    skippedCallTick = -1;
     if (tl && b !== tl) startAt = null;    // 다른 타임라인 — 예약 시각은 옛 격자의 것
     tl = b;
     G.core.attach(user);
@@ -179,6 +185,12 @@
     plan(); lastUnit = startUnit - 1;
     if (!s) callStop();
     syncReveal();
+    // 공개 첫 박의 채널 콜백이 미션 활성화 전 지나갔다면, 비주얼과 같은 오디오 시각에 그 음성만 보충 예약
+    const revealTick = revealUnit * LEN;
+    if (s && tl && skippedCallTick === revealTick) {
+      skippedCallTick = -1;
+      callAt(revealTick, tl.timeOf(revealTick));
+    }
     apply();
     draw();
   }

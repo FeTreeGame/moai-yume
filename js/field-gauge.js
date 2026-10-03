@@ -55,15 +55,26 @@
   let count = 0;                     // 'fill'을 다 채운 횟수
   let holding = false;               // 지금 누르는 뚜~가 채우는 중인가 (쉼이 끝난 뒤 누른 것만)
   let lock = null;                   // 쉼: null | { from(시작), fxEnd(연출 끝), until(끝 시각), drainFrom(소강 시작 때의 채움) }
+  let restAfterMission = false;
 
   const el = document.getElementById('fieldGauge');
   const bar = el && el.querySelector ? el.querySelector('.field-gauge-fill') : null;
   const cue = document.getElementById('fieldGaugeCue');   // 홀드 미션 문구 (자리 표시)
-  const CUE = { wait: 'HOLD NOW!', hold: 'KEEP HOLDING!' };
+  const CUE = { wait: 'HOLD NOW!', hold: 'KEEP HOLDING!', finalWait: 'TAP MINI MOAI!', finalHold: 'NO MORE STEPS!' };
+  document.addEventListener('moai:main-rendered', function() {
+    if (cue) cue.classList.add('cue-ready');
+  }, { once: true });
 
   function receiving() { return !M.fieldProgress || M.fieldProgress.receiving(); }   // 게이지 미션을 받는 상태 (진행 표가 가짐)
   function paused() { return !receiving(); }
   function emit(kind) {   // source = 그 단계의 입력원 (다 찬 순간의 것 — 진행 표가 다음 단계로 넘기기 전)
+    if (kind === 'appear' || kind === 'full') {
+      const progress = M.fieldProgress;
+      const state = progress && progress.state ? progress.state() : null;
+      const level = state && progress.levels ? progress.levels[state.level] : null;
+      const card = level && level.condition && level.condition.card;
+      restAfterMission = card === 'hold' || card === 'loopClear';
+    }
     document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: kind, actor: 'gauge', count: count, source: GAUGE.source } }));
   }
   // 보이기 상태 (하단 루프 막대가 같이 보이고 숨는다 — js/field-rhythm.js): shown = 미션을 받는 중, alpha = 바의 불투명도 (바 생성 단계 = 채운 만큼)
@@ -80,9 +91,26 @@
   // 홀드 미션 문구: 홀드를 기다리는 동안(홀드 단계 · 미션 받는 중 · 쉼 아님) — 누르는 중이면 KEEP HOLDING!, 아니면 HOLD NOW!
   function renderCue() {
     if (!cue) return;
-    const on = GAUGE.source === 'hold' && !paused() && !lock;
+    const progress = M.fieldProgress;
+    const state = progress && progress.state ? progress.state() : null;
+    const level = state && progress.levels ? progress.levels[state.level] : null;
+    const allClear = !!(M.fieldActors && ((M.fieldActors.complete && M.fieldActors.complete()) || (M.fieldActors.completionPreview && M.fieldActors.completionPreview())));
+    if (allClear) {
+      cue.classList.remove('hidden');
+      cue.textContent = 'GAME ALL CLEAR!';
+      return;
+    }
+    const rhythmMission = !!(level && level.condition && level.condition.card === 'loopClear');
+    const on = !paused() && (lock ? restAfterMission : (GAUGE.source === 'hold' || rhythmMission));
     cue.classList.toggle('hidden', !on);
-    if (on) cue.textContent = holding ? CUE.hold : CUE.wait;
+    if (!on) return;
+    if (lock && restAfterMission) { cue.textContent = 'GOOD JOB!'; return; }
+    const finalHold = !!(level && level.condition && level.condition.card === 'hold' && level.reward === 'none' && level.repeat === 'untilEmpty');
+    cue.textContent = rhythmMission
+      ? 'MATCH RHYTHM!'
+      : finalHold
+        ? (holding ? CUE.finalHold : CUE.finalWait)
+        : (holding ? CUE.hold : CUE.wait);
   }
   function render() {
     announceView();
@@ -109,7 +137,7 @@
   function restKind() { if (!lock) return null; const t = clock(); if (t >= lock.until) return null; return t < lock.fxEnd ? 'fx' : 'drain'; }
   function locked() { if (lock && clock() >= lock.until) endRest(); return !!lock; }
   // 쉼 끝: 받기 시작 (HOLD NOW!) — 쉼 동안 눌러 둔 뚜~는 안 참 (이때부터 새로 어택한 것만)
-  function endRest() { lock = null; value = 0; lastStep = 0; holding = false; render(); emit('ready'); }
+  function endRest() { lock = null; restAfterMission = false; value = 0; lastStep = 0; holding = false; render(); emit('ready'); }
   function restUntil(t) {               // 끝 시각 걸기 (진행 표 — 다 찬 순간)
     if (!lock) return;
     lock.until = Math.max(t, lock.from);
@@ -162,6 +190,8 @@
     if (holding || value > 0) wake();   // 떼면 줄어들기 시작
     renderCue();
   });
+  document.addEventListener('moai:field-clear', renderCue);
+  document.addEventListener('moai:completion-preview', renderCue);
   document.addEventListener('moai:field-event', function(e) {   // 게이지 미션을 받는 상태가 바뀜 (진행 표)
     const d = e.detail;
     if (d.kind !== 'receive' || d.actor !== 'progress') return;

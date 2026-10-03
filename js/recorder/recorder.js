@@ -1,10 +1,10 @@
 // ========== Config ==========
-// dur = 녹음 뼈대 길이 (초) — 녹음 시간·자르기·파형 폭의 기준. 원본 음원 길이(1.093 / 0.506 / 0.267 s)를 반올림
-// file = 원본 참고 음원 (있으면 원본 파형·▶ 원본·▶ 비교 제공, 없어도 녹음 동작 — 게시본에는 원작 음원 없음)
+// dur = 녹음 뼈대 길이 (초) — 녹음 시간·자르기·파형 폭의 기준
+// file = 현재 게임 음성 (샘플 탭의 원본 파형·▶ 원본·▶ 비교 기준)
 var SAMPLES = [
-  { name: 'doo',    file: 'leftDoo.ogg',  label: 'Doo',    role: '뚜~ (홀드 지속음)', loop: true,  dur: 1.1 },
-  { name: 'pah',    file: 'leftPah.ogg',  label: 'Pah',    role: '떽! (숏 릴리즈)',    loop: false, dur: 0.5 },
-  { name: 'wop',    file: 'leftWop.ogg',  label: 'Wop',    role: '웡~ (롱 릴리즈)',    loop: false, dur: 0.3 },
+  { name: 'doo',    file: 'assets/voice/doo.wav', label: 'Doo', role: '뚜~ (홀드 지속음)', loop: true,  dur: 1.1 },
+  { name: 'pah',    file: 'assets/voice/pah.wav', label: 'Pah', role: '떽! (숏 릴리즈)',    loop: false, dur: 0.5 },
+  { name: 'wop',    file: 'assets/voice/wop.wav', label: 'Wop', role: '웡~ (롱 릴리즈)',    loop: false, dur: 0.3 },
 ];
 function sampleDur(name) {
   for (var i = 0; i < SAMPLES.length; i++) if (SAMPLES[i].name === name) return SAMPLES[i].dur;
@@ -57,9 +57,9 @@ function playClick(when, isAccent) {
   osc.stop(when + 0.06);
 }
 
-// 원본 참고 음원 (선택) — 없거나 실패하면 null (녹음은 뼈대 길이로 동작)
+// 현재 게임 음성 참고 파일 — 없거나 실패해도 녹음은 뼈대 길이로 동작
 function loadOriginal(sample) {
-  return fetch('assets/sounds/' + sample.file)
+  return fetch(sample.file)
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
     .then(function(buf) { return actx.decodeAudioData(buf); })
     .then(function(decoded) {
