@@ -55,20 +55,32 @@
   // ── 시작 덮개 (TAP TO START): 캔버스가 처음 드러났을 때 그 위에 — 투명, 글자만 ──
   //   왜: 브라우저는 손의 입력이 있기 전에는 소리를 내지 않는다. 입력 없이 곧바로 시작했다가 소리가 뚝 끊긴 듯한 경험을 피한다 —
   //       첫 입력을 '시작'으로 받아 소리 장치를 켜 두고, 그 다음 입력부터 연주로 받는다 (첫 입력은 연주로 들어가지 않는다)
-  //   캔버스 상자만 덮는다 (구석의 단추들은 그대로 쓸 수 있다). 다른 곳을 눌러 소리 장치가 켜졌으면 저절로 걷힌다
+  //   글자는 캔버스의 한가운데 (.start-cover — 누름을 받지 않는다), 누름은 화면 전체가 받는다 (.start-catch — 구석의 조작 버튼 · 드로어 단추까지 덮는다)
+  //     화면 어디든 첫 탭(눌렀다 뗌)은 시작으로만 쓰인다 — 브라우저가 소리를 허락하는 것도 닿는 순간이 아니라 떼는 순간이다
+  //     (전에는 캔버스만 덮었다 — 손가락으로 조작 버튼부터 누르면 소리 장치가 켜지지 않은 채 덮개가 남았다)
+  //   걷힐 때: 누름은 바로 풀고 (이어서 치는 입력이 먹히게), 글자는 START.fade 동안 옅어지며 사라진다
   //   뜨는 때 = 그림을 처음 그린 순간 ('moai:main-rendered' — js/sprite.js가 로딩 덮개를 걷는 때)
   const box = document.querySelector('.sprite-box');
-  let startEl = null, starting = false;
-  function running() { const c = ctx(); return !!c && c.state === 'running'; }
-  function startHide() { if (!startEl) return; startEl.classList.add('hidden'); starting = false; }
+  const START = { fade: 300 };          // 글자가 사라지는 길이 (ms — style.css .start-cover의 전환과 같은 값)
+  let startEl = null, catchEl = null, starting = false;
+  function startHide() {
+    if (!startEl || !starting) return;
+    starting = false;
+    if (catchEl) catchEl.classList.add('hidden');
+    startEl.classList.add('leaving');
+    setTimeout(function() { startEl.classList.add('hidden'); }, START.fade + 50);
+  }
   function startShow() {
     if (!box || startEl) return;      // 소리 장치가 이미 돌고 있어도 띄운다 — 자주 찾은 사이트는 PC의 브라우저가 입력 없이도 소리를 허락해, 그 경우 덮개가 아예 뜨지 않았다. 시작은 언제나 한 번 누르는 것으로
     startEl = document.createElement('div');
     startEl.className = 'start-cover';
     startEl.innerHTML = '<div class="start-hint">TAP TO START</div>';
     box.appendChild(startEl); starting = true;
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(function(t) { startEl.addEventListener(t, function(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); }, { passive: false }); });
-    ['pointerup', 'click', 'touchend'].forEach(function(t) { startEl.addEventListener(t, function(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); start(); }, { passive: false }); });
+    catchEl = document.createElement('div');
+    catchEl.className = 'start-catch';
+    document.body.appendChild(catchEl);
+    ['pointerdown', 'mousedown', 'touchstart'].forEach(function(t) { catchEl.addEventListener(t, function(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); }, { passive: false }); });
+    ['pointerup', 'click', 'touchend'].forEach(function(t) { catchEl.addEventListener(t, function(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); start(); }, { passive: false }); });
   }
   function start() {
     if (!starting) return;
@@ -80,7 +92,6 @@
   const lc = document.getElementById('spriteLoadingCover');
   if (lc && lc.classList.contains('dismissed')) startShow();           // 이미 드러나 있었으면 바로
   window.addEventListener('keydown', function(e) { if (!starting || paused) return; e.stopImmediatePropagation(); e.preventDefault(); if (!e.repeat) start(); }, true);   // 첫 키도 시작으로
-  window.addEventListener('pointerup', function() { if (starting) setTimeout(function() { if (starting && running()) startHide(); }, 50); }, true);                    // 다른 곳을 눌러 소리가 켜졌으면 걷는다
 
   M.pause = { on: function() { return paused; }, pause: pause, resume: resume, start: start, starting: function() { return starting; } };
 })();

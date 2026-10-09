@@ -395,10 +395,15 @@ function startRecording(name) {
   lockForRecording(name);
   recPending = true; announceBusy();             // 마이크가 열리기 전에 게임의 소리부터 내린다
 
-  navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false }
+  // 권한 창이 뜰 것인데 전체 화면 중이면 전체 화면부터 끈다 (js/mic-gate.js — 창이 전체 화면 안에서 뜨면 그 탭의 전체 화면이 죽는 일이 있었다)
+  var mic = window.Moai && window.Moai.mic;
+  (mic ? mic.clearFullscreen() : Promise.resolve()).then(function() {
+    return navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false }
+    });
   }).then(function(stream) {
-    recPending = false;                          // 이 아래에서 바로 currentRecording이 서거나 (바쁨 유지) 취소된다
+    if (mic) mic.mark();
+    recPending = false;                         // 이 아래에서 바로 currentRecording이 서거나 (바쁨 유지) 취소된다
     if (!sampleVisible) {                        // 마이크 허용을 기다리는 사이 탭을 벗어남 → 시작하지 않음
       stream.getTracks().forEach(function(t) { t.stop(); });
       setSlotStatus(name, '녹음 취소');

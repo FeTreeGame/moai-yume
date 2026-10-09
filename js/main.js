@@ -167,55 +167,25 @@
 
   // 설정 탭의 전체 화면 토글
   var fullscreenToggle = document.getElementById('fullscreenToggle');
-  //   브라우저의 답(document.fullscreenElement)만 믿지 않는다: 권한 창(녹음 등)이 뜨면 화면은 전체 화면에서 빠져나오는데 브라우저는 여전히 '전체 화면 중'이라고
-  //   답하는 경우가 있다 — 그러면 단추는 끄기만 시도하고 (끌 것이 없어 아무 일도 없다) 그 뒤로 내내 먹통이었다
-  //   → 전체 화면에 들어갔을 때의 창 높이를 적어 두고, 그보다 뚜렷이 줄어 있으면 '풀린 것'으로 본다 (fsStale). 풀린 것이면 다시 켠다
-  //   끄기를 시도했는데 달라진 것이 없어도 (알림이 오지 않고 여전히 전체 화면이라고 답함) 다시 켠다. 실패 문구는 잠깐만 보이고 돌아온다
-  var fsHeight = 0, fsNoteTimer = null;
-  function fsStale() { return !!document.fullscreenElement && fsHeight > 0 && window.innerHeight < fsHeight - 24; }
-  function fsActive() { return !!document.fullscreenElement && !fsStale(); }
+  //   브라우저의 답(document.fullscreenElement)대로 켜고 끈다. 실패 문구는 잠깐만 보이고 돌아온다
+  //   (권한 창이 전체 화면 안에서 뜨면 그 탭의 전체 화면이 죽는 일은 녹음 쪽에서 막는다 — js/mic-gate.js)
+  var fsNoteTimer = null;
   function updateFullscreenToggle() {
-    var active = fsActive();
+    var active = !!document.fullscreenElement;
     fullscreenToggle.textContent = active ? '전체 화면 종료' : '전체 화면';
     fullscreenToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   function fsNote(text) {
     fullscreenToggle.textContent = text;
-    clearTimeout(fsNoteTimer); fsNoteTimer = setTimeout(updateFullscreenToggle, 1500);
-  }
-  function fsEnter(target) {
-    var el = target || document.documentElement;
-    if (!el.requestFullscreen) { fsNote('전체 화면 미지원'); return; }
-    var p; try { p = el.requestFullscreen(); } catch (e) { p = Promise.reject(e); }
-    if (p && p.then) p.then(function() { setTimeout(function() { if (document.fullscreenElement) fsHeight = window.innerHeight; updateFullscreenToggle(); }, 300); },
-      function() { fsNote('전체 화면을 사용할 수 없음'); });
+    clearTimeout(fsNoteTimer); fsNoteTimer = setTimeout(function() { fsNoteTimer = null; updateFullscreenToggle(); }, 1500);
   }
   fullscreenToggle.addEventListener('click', function() {
-    if (!document.fullscreenElement) { fsEnter(); return; }
-    if (fsStale()) {                                   // 풀려 있는데 브라우저는 전체 화면이라고 답함 → 그 기억을 지우고 다시 켠다 (다른 요소로 — 같은 요소면 '이미 전체 화면'이라 넘어갈 수 있다)
-      var again = function() { fsEnter(document.fullscreenElement === document.documentElement ? document.body : document.documentElement); };
-      var q; try { q = document.exitFullscreen(); } catch (e) { q = null; }
-      if (q && q.then) q.then(again, again); else again();
-      return;
-    }
-    var changed = false, mark = function() { changed = true; };
-    document.addEventListener('fullscreenchange', mark, { once: true });
-    var r; try { r = document.exitFullscreen(); } catch (e) { r = null; }
-    if (r && r.catch) r.catch(function() {});
-    setTimeout(function() {                            // 끄기가 먹지 않았다 (알림이 없고 여전히 전체 화면이라고 답함) → 풀려 있던 것으로 보고 다시 켠다
-      document.removeEventListener('fullscreenchange', mark);
-      if (!changed && document.fullscreenElement) fsEnter(document.fullscreenElement === document.documentElement ? document.body : document.documentElement);
-      else updateFullscreenToggle();
-    }, 500);
+    if (document.fullscreenElement) { document.exitFullscreen().catch(function() {}); return; }
+    if (!document.documentElement.requestFullscreen) { fsNote('전체 화면 미지원'); return; }
+    document.documentElement.requestFullscreen().catch(function() { fsNote('전체 화면을 사용할 수 없음'); });
   });
-  document.addEventListener('fullscreenchange', function() {
-    if (document.fullscreenElement) setTimeout(function() { if (document.fullscreenElement) fsHeight = window.innerHeight; updateFullscreenToggle(); }, 300);
-    else fsHeight = 0;
-    updateFullscreenToggle();
-  });
-  document.addEventListener('fullscreenerror', updateFullscreenToggle);
-  window.addEventListener('resize', updateFullscreenToggle);
-  document.addEventListener('visibilitychange', updateFullscreenToggle);
+  document.addEventListener('fullscreenchange', updateFullscreenToggle);
+  document.addEventListener('fullscreenerror', function() { if (!fsNoteTimer) updateFullscreenToggle(); });   // 실패 문구가 떠 있으면 덮지 않는다 (진입이 거절되면 이 알림이 문구 바로 뒤에 온다)
 
   // 세션 HUD 표시 설정 (처음에는 끔, 이후 선택은 기기에 저장) — 개발 탭의 조작: 개발 공간(?dev)이 아니면 늘 끔 (저장된 값도 보지 않음)
   var sessionHudToggle = document.getElementById('sessionHudToggle');

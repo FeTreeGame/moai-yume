@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>모아이 리듬 프로토타입</title>
+  <title>모아이의 꿈꾸는 섬</title>
+  <link rel="icon" href="data:,"><!-- 아이콘 없음 — 브라우저가 favicon.ico를 찾다 404를 내지 않게 -->
   <script>
     var _v='?_='+Date.now();
     document.write('<link rel="stylesheet" href="style.css'+_v+'">');
@@ -141,8 +142,15 @@
     <div class="drawer-page" id="drawerConfig">
       <div class="drawer-scroll">
         <div class="drawer-scroll-content">
+          <div class="bgm-title">디스플레이</div>
           <div class="beat-controls fullscreen-controls">
             <button class="ctrl-btn" id="fullscreenToggle" type="button" aria-pressed="false">전체 화면</button>
+          </div>
+          <!-- 이펙트 켜고 끄기 (js/fx-options.js): 한 줄의 토글 — 켜져 있으면 불이 들어온다. 분위기는 손가락만 쓰는 기기(handheld)에서 끈 채 고정 · 버튼 없음 -->
+          <div class="beat-controls fx-controls" id="fxOptions">
+            <button class="ctrl-btn" data-fx="atmo" type="button" aria-pressed="true">분위기</button>
+            <button class="ctrl-btn" data-fx="hit" type="button" aria-pressed="true">타격감</button>
+            <button class="ctrl-btn" data-fx="camera" type="button" aria-pressed="true">카메라</button>
           </div>
           <div class="bgm-title">사운드 밸런스</div>
           <div class="mixer-presets" id="mixerPresets"></div>
@@ -219,9 +227,9 @@
 document.write(DATA.map(function(n) { return 'js/data/' + n + '.js'; }).concat([
   'js/state.js','js/leave-guard.js','js/data-store.js','js/gate.js','js/touch-fx.js','js/ui.js','js/mixer.js','js/audio.js',
   'js/loudness.js','js/original.js','js/input.js','js/scene.js','js/layout.js','js/moai-anim.js','js/sprite.js','js/friends.js','js/frame.js','js/field-clock.js','js/tint.js','js/field-actors.js','js/field-events.js','js/field-gauge.js','js/rewards.js','js/scenery.js','js/accessories.js','js/sfx.js','js/fx.js','js/impact.js','js/field-progress.js','js/voice-fx.js','js/possess.js','js/facing.js','js/camera.js','js/moai-touch.js','js/dress.js',
-  'js/scroll-track.js','js/pad.js','js/main.js',
+  'js/scroll-track.js','js/pad.js','js/mic-gate.js','js/main.js',
   'js/rhythm/init.js','js/rhythm/audio.js','js/rhythm/judge.js','js/rhythm/hud.js','js/rhythm/guide.js','js/rhythm/reveal.js','js/rhythm/approach.js','js/rhythm/feedback.js','js/rhythm/guide-fx.js','js/rhythm/bridge.js',
-  'js/rhythm/conductor.js','js/rhythm/core.js','js/rhythm/voices.js','js/rhythm/session.js','js/rhythm/bgm-player.js','js/bgm.js','js/field-rhythm.js','js/camera-rules.js','js/atmo.js','js/frame-fx.js','js/hud-info.js','js/pause.js','js/custom-session.js','js/fx-rules.js','js/judge-config.js',
+  'js/rhythm/conductor.js','js/rhythm/core.js','js/rhythm/voices.js','js/rhythm/session.js','js/rhythm/bgm-player.js','js/bgm.js','js/field-rhythm.js','js/camera-rules.js','js/atmo.js','js/frame-fx.js','js/hud-info.js','js/pause.js','js/custom-session.js','js/fx-rules.js','js/fx-options.js','js/judge-config.js',
   'js/recorder-bridge.js','js/recorder/dsp.js','js/recorder/draw.js',
   'js/recorder/ui.js','js/recorder/playback.js','js/recorder/recorder.js','js/recorder/bake.js'
 ]).concat(/[?&]layout\b/.test(location.search) ? ['js/layout-editor.js'] : [])  // 레이아웃 편집기 (개발용)

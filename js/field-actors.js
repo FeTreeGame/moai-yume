@@ -150,7 +150,8 @@
   //   이미지마다 맞춤 = 데이터 파일 sky (js/data/sky.js — 편집기 ?sky): { <풀>: { '01': { scale, dx, dy } } }
   //     scale = 종류 폭(KINDS w) 대비 배율, dx·dy = 움직임 중심에서 그림 중심까지 (캔버스 폭·높이 비 — dx는 바라보는 방향 따라 반전). 판정·착지도 그림을 따름
   //   faceRight = 그 풀의 그림이 오른쪽을 본다 (나아가는 쪽으로 뒤집음) / null = 뒤집지 않음 (글자 등)
-  const SKY = { slots: 8, pools: { banner: 'deco', balloon: 'tap' }, faceRight: { deco: null, tap: true } };
+  //   slots = 풀마다 찾아볼 자리 수 (01 ~). 지금은 0 — 넣은 그림이 없어 찾지 않는다 (찾으면 없는 파일마다 404가 났다). 그림을 넣으면 그 수만큼 올린다
+  const SKY = { slots: 0, pools: { banner: 'deco', balloon: 'tap' }, faceRight: { deco: null, tap: true } };
   const skyPool = { deco: [], tap: [] };   // 풀 → [{ name: '01', file, img }] (있는 파일만, 이름 순)
   function skyFile(pool, name) { return 'assets/sky/' + pool + '/' + name + '.png'; }
   function skyAdd(pool, name, img) {

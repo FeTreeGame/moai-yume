@@ -229,15 +229,15 @@ body::after {
 .dress-cell { display: grid; aspect-ratio: 1; padding: var(--d-gap); background: transparent; cursor: pointer;
   border: var(--d-border) solid var(--text-dim); border-radius: var(--d-radius); transition: border-color 0.15s; }
 .dress-cell img { grid-area: 1 / 1; display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; pointer-events: none; }   /* 묶음 = 그림 여럿을 같은 자리에 겹침 */
-.dress-cell:hover { border-color: var(--cyan); }
+:where(html.has-mouse) .dress-cell:hover, .dress-cell:active { border-color: var(--cyan); }
 .dress-cell.on { border-color: var(--d-on-border); background: color-mix(in srgb, var(--d-on) 8%, transparent); }
 .dress-art { grid-area: 1 / 1; place-self: center; position: relative; display: block; pointer-events: none; }   /* 묶음: 그림들을 화면에서의 서로의 자리 · 크기 그대로 (js/scenery.js slots의 box) */
 .dress-art img { position: absolute; object-fit: fill; }
 .dress-cell img.lock { filter: brightness(0); opacity: 0.45; }   /* 아직 얻지 않은 것 = 실루엣 (검정 + 반투명) */
 .dress-cell.locked { border-style: dashed; cursor: default; }
-.dress-cell.locked:hover { border-color: var(--text-dim); }
+:where(html.has-mouse) .dress-cell.locked:hover, .dress-cell.locked:active { border-color: var(--text-dim); }
 .dress-cell.empty { border-style: dashed; opacity: 0.4; cursor: default; }   /* 빈 칸 */
-.dress-cell.empty:hover { border-color: var(--text-dim); }
+:where(html.has-mouse) .dress-cell.empty:hover, .dress-cell.empty:active { border-color: var(--text-dim); }
 .dress-grid .ctrl-btn { width: 100%; height: 100%; min-height: 0; padding: 0; background: transparent; letter-spacing: var(--d-letter); }   /* 선택 · 취소 = 치장의 마지막 두 칸 */
 
 /* === 드로어 토글 버튼 === */
@@ -265,7 +265,7 @@ body::after {
   padding: 0;
   font-family: inherit;
 }
-.drawer-toggle:hover {
+:where(html.has-mouse) .drawer-toggle:hover, .drawer-toggle:active {
   background: rgba(10, 10, 18, 0.9);
   border-color: var(--phosphor-dim);
 }
@@ -292,7 +292,7 @@ body::after {
    색은 빨강 (--exit-color) — 조작 버튼(초록)과 다른 일을 하는 버튼 */
 .pad-overlay .pad-exit { --exit-color: #ff405b; --exit-glow: rgba(255, 64, 91, 0.45);
   position: absolute; left: 0; bottom: calc(100% + var(--pad-gap)); height: 100%; box-sizing: border-box; overflow: hidden; border-color: rgba(255, 64, 91, 0.55); }
-.pad-overlay .pad-exit:hover { border-color: var(--exit-color); box-shadow: 0 0 16px var(--exit-glow); }
+:where(html.has-mouse) .pad-overlay .pad-exit:hover { border-color: var(--exit-color); box-shadow: 0 0 16px var(--exit-glow); }
 .pad-overlay .pad-exit:active, .pad-overlay .pad-exit.holding { border-color: var(--exit-color); box-shadow: 0 0 24px var(--exit-glow), inset 0 0 12px var(--exit-glow); }
 .pad-overlay .pad-exit .play-label, .pad-overlay .pad-exit .play-hint { color: var(--exit-color); }
 .pad-overlay .pad-exit .play-key { color: var(--exit-color); border-color: rgba(255, 64, 91, 0.45); }
@@ -305,10 +305,14 @@ body::after {
 .pause-cover { position: fixed; inset: 0; z-index: 15000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   background: rgba(6, 6, 14, 0.78); color: #fff; font-weight: bold; text-align: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
 .pause-cover.hidden { display: none; }
-/* 시작 덮개 (js/pause.js): 캔버스가 처음 드러났을 때 그 위에 — 투명, 글자만 (캔버스의 한가운데 · 그림자로 읽히게 · 3초 주기로 천천히 깜빡임). 누르면 소리 장치를 켜고 걷힌다 */
+/* 시작 덮개 (js/pause.js): 캔버스가 처음 드러났을 때 그 위에 — 투명, 글자만 (캔버스의 한가운데 · 그림자로 읽히게 · 3초 주기로 천천히 깜빡임). 탭하면 소리 장치를 켜고 걷힌다
+   글자 = .start-cover (캔버스 위 — 누름을 받지 않는다 · 걷힐 때 0.3초 옅어진다) / 누름 = .start-catch (화면 전체 — 구석의 단추들까지 덮는다. 일시 정지 덮개보다는 아래) */
 .start-cover { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+  pointer-events: none; user-select: none; -webkit-user-select: none; opacity: 1; transition: opacity 0.3s ease-out; }
+.start-cover.leaving { opacity: 0; }
 .start-cover.hidden { display: none; }
+.start-catch { position: fixed; inset: 0; z-index: 14000; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.start-catch.hidden { display: none; }
 .start-hint { color: #fff; font-weight: bold; font-size: max(16px, calc(var(--canvas-h) * 0.085)); letter-spacing: 0.2em; padding-left: 0.2em; white-space: nowrap;
   text-shadow: 0 calc(var(--canvas-h) * 0.004) 0 rgba(0,0,0,0.8), 0 0 calc(var(--canvas-h) * 0.02) rgba(0,0,0,0.7); animation: start-blink 3s ease-in-out infinite; }
 @keyframes start-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }   /* 천천히 (처음 1.4초 — 너무 짧았다) */
@@ -404,7 +408,7 @@ body::after {
   cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
-.play-area:hover { border-color: var(--phosphor); box-shadow: 0 0 16px var(--phosphor-glow); }
+:where(html.has-mouse) .play-area:hover { border-color: var(--phosphor); box-shadow: 0 0 16px var(--phosphor-glow); }
 .play-area:active, .play-area.active { border-color: var(--phosphor); box-shadow: 0 0 24px var(--phosphor-glow), inset 0 0 12px var(--phosphor-glow); }
 .play-label { font-size: var(--d-font-value); line-height: 1.2; color: var(--d-on); letter-spacing: var(--d-letter); pointer-events: none; white-space: nowrap; }
 .play-hint {
@@ -468,7 +472,9 @@ html.has-mouse .play-key { display: block; }   /* 판별은 js/state.js (Moai.de
   color: var(--text-dim); background: transparent;
   cursor: pointer; transition: color 0.15s, border-color 0.15s;
 }
-.ctrl-btn:hover, .ctrl-btn:focus-visible { color: var(--cyan); border-color: var(--cyan); outline: none; }
+/* 올려 둔 표시(:hover)는 마우스가 있는 기기에서만 — 터치에서는 누른 뒤에도 hover가 붙어 남는다 (다른 곳을 눌러야 풀림). 누르는 동안의 표시는 :active (손을 떼면 풀림)
+   :where = 우선순위를 올리지 않는다 (켜짐 .active가 그대로 이긴다). 판별은 js/state.js (Moai.device) 한 곳. 이 파일의 다른 :hover도 같은 방식 */
+:where(html.has-mouse) .ctrl-btn:hover, .ctrl-btn:active, .ctrl-btn:focus-visible { color: var(--cyan); border-color: var(--cyan); outline: none; }
 .ctrl-btn.active { color: var(--d-on); border-color: var(--d-on-border); }   /* 켜짐의 톤은 하나 (--d-on · --d-on-border) */
 
 /* === 드로어 탭 바 === */
@@ -499,7 +505,7 @@ html.has-mouse .play-key { display: block; }   /* 판별은 js/state.js (Moai.de
 .drawer-tab.hidden { display: none; }
 /* 이탈 방어 (js/leave-guard.js): 화면을 당겨 새로고침하는 동작을 끔 */
 html.no-pull-refresh, html.no-pull-refresh body { overscroll-behavior: none; }
-.drawer-tab:hover { color: var(--text); }
+:where(html.has-mouse) .drawer-tab:hover, .drawer-tab:active { color: var(--text); }
 .drawer-tab.active {
   color: var(--phosphor);
   border-bottom-color: var(--phosphor);
@@ -610,7 +616,7 @@ html:not(.handheld) .drawer-scroll-content { overflow-y: auto; touch-action: aut
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.beat-pattern-btn:hover { color: var(--text); border-color: var(--text); }
+:where(html.has-mouse) .beat-pattern-btn:hover, .beat-pattern-btn:active { color: var(--text); border-color: var(--text); }
 .beat-pattern-btn.beat-main { grid-column: 1 / -1; }   /* 메인 BGM — 묶음 맨 위에 줄 전체 (js/bgm.js) */
 .beat-pattern-btn.active {
   color: var(--d-on);
@@ -645,7 +651,7 @@ html:not(.handheld) .drawer-scroll-content { overflow-y: auto; touch-action: aut
 
 /* 잠긴 항목 (비트 · 곡 — 필드 · 세션 보상으로 획득) */
 .beat-pattern-btn.locked { opacity: 0.4; border-style: dashed; cursor: default; }
-.beat-pattern-btn.locked:hover { color: var(--text-dim); border-color: var(--text-dim); }
+:where(html.has-mouse) .beat-pattern-btn.locked:hover, .beat-pattern-btn.locked:active { color: var(--text-dim); border-color: var(--text-dim); }
 
 /* 사운드 밸런스 · 볼륨 믹서 (설정 탭) */
 .mixer-rows { display: flex; flex-direction: column; gap: var(--d-gap); }
@@ -695,6 +701,8 @@ html:not(.handheld) .drawer-scroll-content { overflow-y: auto; touch-action: aut
 .drawer-scroll-content > .bgm-title:first-child { margin-top: 0; }
 
 /* 버튼 줄 (.beat-controls) — 위 버튼 묶음과 같은 격자 (하나뿐이면 줄 전체, 둘이면 반씩) */
+.fx-controls { --chars: 3; }                                   /* 이펙트 토글 (js/fx-options.js) — 셋이 한 줄에 */
+html.handheld .fx-controls [data-fx="atmo"] { display: none; }   /* 분위기는 손가락만 쓰는 기기에서 끈 채 고정 — 버튼 없음 */
 
 /* 값 넘기기 줄: [<| 지금 값 |>] — 한 덩어리 (칸 사이 틈 없음). 양옆 버튼은 고정 폭, 가운데가 남는 폭 (js/ui.js stepper · BPM 줄 공용) */
 .stepper {
@@ -791,8 +799,8 @@ html:not(.handheld) .drawer-scroll-content { overflow-y: auto; touch-action: aut
 .slot-main.asking { pointer-events: none; }
 .ctrl-btn.ask-yes { color: var(--blue); border-color: var(--blue); }
 .ctrl-btn.ask-no { color: var(--coral); border-color: var(--coral); }
-.ctrl-btn.ask-yes:hover, .ctrl-btn.ask-yes:active { color: #fff; background: color-mix(in srgb, var(--blue) var(--d-ask-fill), var(--ground)); border-color: var(--blue); }
-.ctrl-btn.ask-no:hover, .ctrl-btn.ask-no:active { color: #fff; background: color-mix(in srgb, var(--coral) var(--d-ask-fill), var(--ground)); border-color: var(--coral); }
+:where(html.has-mouse) .ctrl-btn.ask-yes:hover, .ctrl-btn.ask-yes:active { color: #fff; background: color-mix(in srgb, var(--blue) var(--d-ask-fill), var(--ground)); border-color: var(--blue); }
+:where(html.has-mouse) .ctrl-btn.ask-no:hover, .ctrl-btn.ask-no:active { color: #fff; background: color-mix(in srgb, var(--coral) var(--d-ask-fill), var(--ground)); border-color: var(--coral); }
 .btn-adopt.adopted { color: var(--d-on); border-color: var(--d-on-border); pointer-events: none; }   /* 완료 = 표시 (누르는 버튼이 아님) */
 
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.6; } }
