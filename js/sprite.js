@@ -85,8 +85,8 @@
     spriteCtx.save();
     if (cam) cam.apply(spriteCtx, W, H, 'world');
 
-    // 레이어: 모아이 + 전경 + 친구 + 배경 보상(scenery.js) + 필드 인스턴스 + 효과 파티클(fx.js), 심도(z) 순 — 배치는 layout.js(M.LAYOUT). 같은 z면 모아이가 앞
-    const layers = (M.friendLayers ? M.friendLayers() : []).concat(M.sceneryLayers ? M.sceneryLayers() : []).concat(M.fieldActors ? M.fieldActors.layers() : []).concat(M.fxLayers ? M.fxLayers() : []);
+    // 레이어: 모아이 + 전경 + 배경 보상(scenery.js) + 필드 인스턴스 + 효과 파티클(fx.js), 심도(z) 순 — 배치는 layout.js(M.LAYOUT). 같은 z면 모아이가 앞
+    const layers = (M.sceneryLayers ? M.sceneryLayers() : []).concat(M.fieldActors ? M.fieldActors.layers() : []).concat(M.fxLayers ? M.fxLayers() : []);
     if (loadedImg(field.front)) layers.push({ id: 'ground', z: M.LAYOUT.ground.z, draw: function(ctx) { M.drawPlaced(ctx, field.front, 'ground', W, H); } });
     layers.push({ id: 'moai', z: M.LAYOUT.moai.z, draw: function(ctx) {
       const acc = M.accessories, L = M.LAYOUT.moai, r = M.placedRect(L, M.LAYOUT_ASPECT.moai, W, H, M.moaiDy());

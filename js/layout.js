@@ -1,21 +1,13 @@
-// 필드 배치 (모아이 + 친구) — 단일 원천. sprite.js·friends.js가 그리고, 레이아웃 편집기(index.html?layout)가 조정한다
+// 필드 배치 (모아이 · 전경) — 단일 원천. sprite.js가 그린다 (친구 캐릭터의 배치는 게시본에서 뺐다 — js/friends.js)
 //   x, y = 중심 (캔버스 폭·높이 비), w = 폭 (캔버스 폭 비, 높이는 이미지 비율을 따름)
 //   rot = 회전(도, 시계 방향), flip = 좌우 반전, z = 심도 (클수록 앞. 같으면 모아이가 앞)
-//   배경(assets/field/back.png)은 레이어 밖 고정. ground = 전경(앞쪽 잔디 띠, assets/field/front.png) — 전경 앞은 굴러조개·비둘매기뿐
-// 값: 컨셉 아트(moai_yume2.png, 4:3) 매칭 초기값 → 레이아웃 편집기로 원본 오버레이에 맞춘 값 (x·y·w 소수 둘째 자리, z 연번)
+//   배경(assets/field/back.png)은 레이어 밖 고정. ground = 전경(앞쪽 잔디 띠, assets/field/front.png)// 값: 컨셉 아트(moai_yume2.png, 4:3) 매칭 초기값 → 레이아웃 편집기로 원본 오버레이에 맞춘 값 (x·y·w 소수 둘째 자리, z 연번)
 (function() {
   const M = window.Moai;
 
   M.LAYOUT = {
-    sun:     { x: 0.20, y: 0.16, w: 0.34, rot: 15.5, flip: false, z: 0 },
-    cloud:   { x: 0.56, y: 0.18, w: 0.45, rot: 7.5,  flip: false, z: 1 },
-    dolphin: { x: 0.16, y: 0.52, w: 0.46, rot: 0,    flip: true,  z: 2 },
-    palm:    { x: 0.81, y: 0.28, w: 0.35, rot: -13,  flip: true,  z: 3 },
-    star:    { x: 0.81, y: 0.62, w: 0.48, rot: 0,    flip: false, z: 4 },
     moai:    { x: 0.57, y: 0.65, w: 0.42, rot: 0,    flip: false, z: 5, pivot: 0.37 },  // pivot = 반전 축 (상자 기준 — placedRect). 0.37 = 캔버스 x ≈ 0.515, 오른쪽을 보는 모습과 대칭으로 실화면에서 확정
     ground:  { x: 0.50, y: 0.92222, w: 1.00, rot: 0, flip: false, z: 6 },   // 보이는 띠만 자른 그림 (원본 1920×1440의 1216 ~ 1440행 — tools/asset-web.py --plain 이 알려 주는 값)
-    clam:    { x: 0.20, y: 0.81, w: 0.43, rot: 0,    flip: true,  z: 7 },
-    pigeon:  { x: 0.79, y: 0.84, w: 0.43, rot: 0,    flip: false, z: 8 },
   };
   // 이미지 높이/폭 비 (기본 1 = 정사각). 모아이 프레임은 1080×1920, 전경은 1920×1440 (캔버스 전체)
   M.LAYOUT_ASPECT = { moai: 1920 / 1080, ground: 224 / 1920 };

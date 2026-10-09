@@ -33,7 +33,7 @@
 //         누르면 'tap' → 그 스테이지로 진입(연결표).
 //         스테이지 결과(session.js 'moai:stage-result')로 성장 — 도달 단계가 오르면 형태가 바뀌고, 성공 없이 끝나면 그대로.
 //         끝까지 완수(도달 = 최상위)하면 'bloom' → 사라짐. 보상(무지개·캐릭터 등, 계열 1:1)은 연결표 'bloom:sprout' 자리
-//         (지금 친구 합류는 세션이 클리어 때 그대로 — friends.js)
+//         (계열의 완수 기록은 세션이 클리어 때 그대로 — friends.js)
 //   계열별 진행(garden): { sprouted, entered, level, done } — 세울 순서·성장의 원천. 새로고침하면 사라진다 (저장은 아직 없음)
 //   자막: caption(id, 글자) — 인스턴스 위에 글자 (보상 안내 등). 착지해 머무는 중이면 읽을 시간만큼 머묾을 늘린다
 //   사건: document 'moai:field-event' { kind: 'pop'|'land'|'sprout'|'tap'|'grow'|'bloom', actor: 종류 id, id, interact, stage, level, x, y }
