@@ -6,8 +6,8 @@
 //   비트 5종 = 이전 비트 시퀀서(beat.js) 패턴, BGM = assets/bgm/*.json (필드 테마 + 친구 테마 7곡, 본편 게임과 같은 에셋)
 //   엔진은 Conductor 연주자 (rhythm/bgm-player.js) — 재생 하나 = 곡 BPM 타임라인 하나 (세션 타임라인과 템포가 달라도 된다)
 //   필드 ↔ 스테이지: 켜짐(on) = 사용자 의도. 세션(스테이지)이 M.fieldBgm.suspend로 멈춰 두고 끝나면 resume으로 되돌린다
-//   내려 두기: 이유(세션·샘플 탭)가 하나라도 있으면 내려 두고 모두 풀리면 켜짐일 때 되돌린다 (HOLD, lower/raise)
-//     내려 둔 동안 조작은 설정만 바꾸고 풀린 뒤에 적용.
+//   내려 두기 = 세션뿐: 세션 동안 멈춰 두고 끝나면 켜짐일 때 되돌린다 (lower/raise). 내려 둔 동안 조작은 설정만 바꾸고 풀린 뒤에 적용.
+//     그 밖에는 사용자가 정지를 누르지 않는 한 멈추지 않는다 — 녹음 탭은 음량만 잠깐 내린다 (믹서 duck: recorder-bridge.js)
 //   메인 BGM 파트: 첫 제스처는 오디오 정책만 풀고 재생하지 않는다 (FIELD.autoStart). 메인 BGM(FIELD.id)은 첫 파트를 필드 보상으로
 //     얻는 순간 재생이 시작되고 (M.fieldBgm.addPart — 진행 표 js/field-progress.js 'bgm' 카드), 그 뒤 파트(MAIN_PARTS 순서 — 킥부터)는
 //     **곡 연출로 저절로 쌓인다** (드럼 쌓기 BUILD — 미션과 비동기): 울리는 메인 BGM 타임라인의 BUILD.loops루프 경계마다 하나씩, 그 첫 박부터 소리.
@@ -33,11 +33,6 @@
   //          겹침이면 두 격자가 동시에 울려야 하므로 자동으로 'new'). 레이어 수는 시간 관계의 성격이 정한다
   const SWAP = { when: 'now', out: 0.4, gap: 0.4, fadeIn: 0, layer: 'new' };
   const PATH = 'assets/bgm/';
-  // 내려 두는 이유별 정책 (세션은 rhythm/session.js가 suspend/resume에 시각·페이드를 넘긴다)
-  //   sample = 샘플 탭(녹음)이 보이는 동안 — 드로어가 열려 있고 샘플 페이지 (main.js 'moai:drawer'가 상태를 알린다)
-  //     녹음은 샘플 탭 안에서만 이어진다 (녹음 중엔 떠나기를 막고, 막지 못한 이탈이면 중지 — recorder.js) → 녹음에 BGM이 섞이지 않는다
-  //   out = 내릴 때 페이드아웃, back = 풀릴 때 페이드인 (초)
-  const HOLD = { sample: { out: 0.4, back: 0.5 } };
 
   // ── 비트: 16스텝 드럼 패턴 (이전 beat.js 프리셋) → 드럼만 있는 곡 ──
   function beat(name, bpm, k, s, h, o) {
@@ -45,13 +40,13 @@
       tracks: { kick: { pattern: k }, snare: { pattern: s }, hihat: { pattern: h }, openHH: { pattern: o } } };
   }
   const BEATS = {
-    basic:  beat('기본 4/4', 105,
+    basic:  beat('정박', 105,
       [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
       [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]),
     funky:  beat('펑키', 110,
       [1,0,0,1, 0,0,1,0, 0,0,1,0, 0,1,0,0], [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1],
       [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1]),
-    moai:   beat('모아이 셔플', 100,
+    moai:   beat('셔플', 100,
       [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0], [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
       [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]),
     march:  beat('행진', 120,
@@ -65,22 +60,30 @@
   // 필드(메인) BGM = **보상용 메인 BGM 자리** (첫 BGM 보상으로 시작하고 드럼이 쌓이는 곡). id는 그 자리에 넣은 값 — 지금 'island'(섬 리듬)는 시험용.
   //   값만 바꾸면 잠금·드럼 쌓기·필드 템포·시험(sim_stage — main()으로 읽음)이 따라감. 곡·음색, 첫 사용자 조작에 바로 재생할지(false = 오디오 정책만 —
   //   첫 파트 획득 때 시작), 시작 페이드인
-  const FIELD = { id: 'island', theme: 'auto', autoStart: false, fadeIn: 2.0 };
+  const FIELD = { id: 'island', theme: 'punch', autoStart: false, fadeIn: 2.0 };
   // 메인 BGM 파트: 얻는 순서 (트랙 id — 비트는 kick·snare·hihat·openHH), 표시 이름, 합류 시각 (메인 BGM 타임라인 기준)
   const MAIN_PARTS = ['kick', 'snare', 'hihat', 'openHH'];
   const PART_NAMES = { kick: '킥', snare: '스네어', hihat: '하이햇', openHH: '오픈 하이햇', bass: '베이스', melody: '멜로디', arp: '아르페지오', pad: '패드' };
   const PART_WHEN = 'bar';
   const BUILD = { loops: 2 };              // 드럼 쌓기 간격 (메인 BGM 타임라인의 루프 수 — 1루프 = 16 tick). 0 = 끔
-  // 비트 잠금: 처음부터 풀려 있는 비트 — 메인 BGM은 첫 파트를 얻을 때 풀린다
-  const BEAT_START = Object.keys(BEATS).filter(function(id) { return id !== FIELD.id; });
-  // 음색 = 스타일 (엔진 SYNTH_THEMES). 기본 = 대상에 어울리는 것 (비트 → 펀치, 곡 → 산뜻)
+  // 해금 — 무엇이 언제 열리나 (한 곳). 처음엔 비트 탭 전체가 잠겨 있다 (조작 · 비트 · 곡 모두)
+  //   start     = 처음부터 열린 것 (지금 없음)
+  //   firstPart = 메인 BGM의 첫 파트를 얻을 때 (필드 보상 'bgm') — 이때부터 비트 탭의 조작(음색 · BPM · 재생)도 열린다
+  //   allParts  = 메인 BGM의 파트가 모두 울릴 때 (곡 연출로 쌓인 것 포함)
+  //   곡은 보상 카드로 (song.<곡 ID> — 아래에서 등록). 누가 언제 주는지는 데이터 파일 missions (필드 단계의 bonus · 세션 계열의 rewards)
+  const UNLOCK = {
+    start: [],
+    firstPart: [FIELD.id],
+    allParts: Object.keys(BEATS).filter(function(id) { return id !== FIELD.id; }),
+  };
+  // 음색 = 스타일 (엔진 SYNTH_THEMES). 처음 값 = 펀치 (FIELD.theme). 자동 = 대상에 어울리는 것 (비트 → 펀치, 곡 → 곡 지정 또는 산뜻)
   // 필드 템포 처음 값 (명시적 기본값 — BGM이 한 번도 울리지 않았을 때 스테이지가 따르는 템포)
   const FIELD_TEMPO = 100;
   const THEMES = [
-    { id: 'auto',  name: '기본' },
+    { id: 'punch', name: '펀치' },
     { id: 'light', name: '산뜻' },
     { id: 'warm',  name: '포근' },
-    { id: 'punch', name: '펀치' },
+    { id: 'auto',  name: '자동' },
   ];
 
   // ── 라우드니스 정규화: 측정 LUFS(게인 1, ffmpeg ebur128) → REF로 맞춘다. BGM 채널 프리셋 보정이 목표로 올린다 (js/mixer.js) ──
@@ -101,22 +104,30 @@
   const beatBox = document.getElementById('bgmBeats');
   const songBox = document.getElementById('bgmSongs');
   const themeBox = document.getElementById('bgmThemes');
-  const slider = document.getElementById('bgmBpm');
+  const slider = document.getElementById('bgmBpm');       // BPM 값을 든 입력 (숨김 — 조작은 단계 버튼)
   const bpmVal = document.getElementById('bgmBpmVal');
+  const bpmDown = document.getElementById('bgmBpmDown'), bpmUp = document.getElementById('bgmBpmUp');
+  const BPM_STEP = 5;          // 단계 버튼 한 번의 BPM (비트·곡의 기본 템포가 모두 이 배수)
   const playBtn = document.getElementById('bgmPlay');
   const stopBtn = document.getElementById('bgmStop');
   if (!songBox || !playBtn || !stopBtn || !slider) return;
 
   let selected = FIELD.id;     // 비트 키 또는 곡 ID
   let theme = FIELD.theme;
+  // 음색 = 값 넘기기 줄 (js/ui.js stepper — 순환)
+  const UI = window.Moai && window.Moai.ui;
+  const themeStep = UI && UI.stepper ? UI.stepper(themeBox, {
+    items: function() { return THEMES; },
+    get: function() { return theme; },
+    set: function(id) { selectTheme(id); },
+  }) : { render: function() {} };
   let bpm = FIELD_TEMPO;       // 필드 템포 (슬라이더) — 언제나 다음 것이 덮어씀
   let on = false;              // 켜짐 (사용자 의도) — 세션이 멈춰 둬도 켜짐이면 세션 뒤 돌아온다
   let token = 0;               // 연타 시 늦게 도착한 로드 결과 무시
   let cur = INSTS[0];          // 지금 울리는(또는 마지막) 인스턴스
   const songBpm = {};          // 곡 ID → 기본 BPM (로드 후)
   function inSession() { return !!(window.Moai && window.Moai.sessionActive); }
-  const holds = {};            // 내려 두는 이유 → true (세션은 Moai.sessionActive로 본다)
-  function held() { return inSession() || Object.keys(holds).length > 0; }
+  function held() { return inSession(); }   // 내려 둔 상태인가 — 이유는 세션 하나 (rhythm/session.js가 suspend/resume에 시각·페이드를 넘긴다)
 
   function defaultBpm(id) { return BEATS[id] ? BEATS[id].bpm : (songBpm[id] || null); }
   function playTheme() {
@@ -125,8 +136,21 @@
   }
 
   const unlocked = {};
-  BEAT_START.forEach(function(id) { unlocked[id] = true; });
-  function beatLocked(id) { return !!BEATS[id] && !unlocked[id]; }
+  UNLOCK.start.forEach(function(id) { unlocked[id] = true; });
+  let opened = UNLOCK.start.length > 0;   // 비트 탭의 조작이 열렸나 (처음 무엇이든 풀릴 때부터)
+  function beatLocked(id) { return (!!BEATS[id] || SONGS.indexOf(id) >= 0) && !unlocked[id]; }   // 잠긴 항목 (비트 · 곡)
+  // 풀기 (모든 해금이 이 한 곳을 지난다): 잠겨 있던 것만 풀고 알린다 — 'moai:field-event' { kind: 'unlock', actor: 'bgm', ids, why }
+  function unlockMany(ids, why) {
+    const got = ids.filter(beatLocked);
+    if (!got.length && opened) return got;
+    got.forEach(function(id) { unlocked[id] = true; });
+    opened = true;
+    render();
+    if (got.length && typeof CustomEvent === 'function' && document.dispatchEvent)
+      document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'unlock', actor: 'bgm', ids: got, why: why } }));
+    return got;
+  }
+  function partsFull() { if (partsOn >= MAIN_PARTS.length) unlockMany(UNLOCK.allParts, 'allParts'); }
   let partsOn = 0;             // 메인 BGM의 얻은 파트 수 (MAIN_PARTS 앞에서부터)
   function partMap() {
     const m = {};
@@ -142,21 +166,29 @@
 
   function render() {
     if (beatPage) beatPage.classList.toggle('tempo-locked', tempoLocked());
+    if (beatPage) beatPage.classList.toggle('beat-locked', !opened);   // 처음 — 탭 전체 잠김 (style.css)
     slider.disabled = tempoLocked();
     itemBtns.forEach(function(b) {
-      const id = b.getAttribute('data-id');
+      const id = b.getAttribute('data-id'), lk = beatLocked(id);
       b.classList.toggle('active', id === selected);
-      if (BEATS[id]) {
-        b.classList.toggle('locked', beatLocked(id));
-        const prog = id === FIELD.id && partsOn < MAIN_PARTS.length ? ' ' + partsOn + '/' + MAIN_PARTS.length : '';
-        b.textContent = (beatLocked(id) ? '🔒 ' : '') + BEATS[id].name + prog;
-      }
+      b.classList.toggle('locked', lk);
+      const prog = id === FIELD.id && partsOn < MAIN_PARTS.length ? ' ' + partsOn + '/' + MAIN_PARTS.length : '';
+      b.textContent = (lk ? '🔒 ' : '') + (BEATS[id] ? BEATS[id].name : id) + prog;
     });
-    document.querySelectorAll('#bgmThemes .beat-pattern-btn').forEach(function(b) {
-      b.classList.toggle('active', b.getAttribute('data-id') === theme);
-    });
+    themeStep.render();
     if (bpm) { slider.value = bpm; bpmVal.textContent = bpm; }
+    const lo = Number(slider.min), hi = Number(slider.max), v = Number(slider.value);
+    if (bpmDown) bpmDown.disabled = !opened || tempoLocked() || v <= lo;
+    if (bpmUp) bpmUp.disabled = !opened || tempoLocked() || v >= hi;
     playBtn.classList.toggle('playing', on);
+  }
+  // BPM 단계 버튼: 한 번에 BPM_STEP — 단위의 배수에 맞춤 (배수가 아닌 값에서 누르면 그 방향의 가장 가까운 배수로), 범위 = 입력의 min~max
+  //   값은 숨은 입력(#bgmBpm)에 넣고 input으로 알린다 — 적용 길(고정 확인·재생 중이면 다음 마디)은 하나
+  function stepBpm(dir) {
+    const lo = Number(slider.min), hi = Number(slider.max), v = Number(slider.value);
+    const next = dir > 0 ? Math.floor(v / BPM_STEP) * BPM_STEP + BPM_STEP : Math.ceil(v / BPM_STEP) * BPM_STEP - BPM_STEP;
+    slider.value = Math.max(lo, Math.min(hi, next));
+    slider.dispatchEvent(new Event('input'));
   }
 
   function load(inst, id, cb) {
@@ -209,7 +241,7 @@
 
   // 재생 버튼: 켜짐 — 내려 둔 동안이면 풀린 뒤에
   function play() {
-    if (tempoLocked()) return;           // 스테이지 중엔 바꿀 수 없음
+    if (!opened || tempoLocked()) return;           // 스테이지 중엔 바꿀 수 없음
     G.ensureCtx();
     on = true;
     announceOp('play');
@@ -219,7 +251,7 @@
   }
 
   function stop() {
-    if (tempoLocked()) return;
+    if (!opened || tempoLocked()) return;
     on = false;
     announceOp('stop');
     token++;
@@ -244,6 +276,7 @@
   }
 
   function selectTheme(id) {
+    if (!opened) { render(); return; }   // 탭이 잠긴 동안엔 바꾸지 않음
     theme = id;
     if (G.isBgmPlaying(cur)) {
       G.setBgmTheme(cur, playTheme() || 'light');
@@ -269,19 +302,25 @@
     if (box !== themeBox) itemBtns.push(b);
   }
 
-  if (beatBox) Object.keys(BEATS).forEach(function(k) { button(beatBox, k, BEATS[k].name, function() { select(k); }); });
+  // 비트 버튼 차례: 메인 BGM(FIELD.id)을 맨 위에 한 줄로 (.beat-main — 줄 전체), 나머지는 그 아래 격자
+  const beatOrder = Object.keys(BEATS).filter(function(k) { return k === FIELD.id; }).concat(Object.keys(BEATS).filter(function(k) { return k !== FIELD.id; }));
+  if (beatBox) beatOrder.forEach(function(k) {
+    button(beatBox, k, BEATS[k].name, function() { select(k); });
+    if (k === FIELD.id && beatBox.lastChild && beatBox.lastChild.classList) beatBox.lastChild.classList.add('beat-main');
+  });
   SONGS.forEach(function(id) { button(songBox, id, id, function() { select(id); }); });
-  if (themeBox) THEMES.forEach(function(t) { button(themeBox, t.id, t.name, function() { selectTheme(t.id); }); });
   slider.addEventListener('input', function() {
-    if (tempoLocked()) { render(); return; }   // 고정 중 — 값 되돌림
+    if (!opened || tempoLocked()) { render(); return; }   // 잠김 · 고정 중 — 값 되돌림
     bpm = parseInt(slider.value, 10);
     if (G.isBgmPlaying(cur)) G.setBgmBpm(cur, bpm, WHEN.bpm);   // 재생 중이면 다음 마디부터
     render();
   });
+  if (bpmDown) { bpmDown.textContent = '−' + BPM_STEP; bind(bpmDown, function() { stepBpm(-1); }); }
+  if (bpmUp) { bpmUp.textContent = '+' + BPM_STEP; bind(bpmUp, function() { stepBpm(1); }); }
   bind(playBtn, play);
   bind(stopBtn, stop);
 
-  // ── 내려 두기 · 되돌리기 (모든 이유가 이 한 쌍을 거친다 — 지금 방식 = 페이드아웃 뒤 정지, 복귀 시 처음부터 페이드인) ──
+  // ── 내려 두기 · 되돌리기 (세션 — 지금 방식 = 페이드아웃 뒤 정지, 복귀 시 처음부터 페이드인) ──
   //   lower(when, fade): 울리고 있으면 when(Conductor 타이밍)부터 fade초 페이드아웃. 켜짐은 그대로
   //     (로드 중인 재생은 로드 뒤 held()를 보고 올리지 않는다)
   //   raise(when, fadeIn): 켜짐이고 내려 둘 이유가 없으면 when에 페이드인으로 다시 (내려 둔 동안 바꾼 설정 반영)
@@ -294,12 +333,6 @@
   function raise(when, fadeIn) {
     if (on && !held() && !G.isBgmPlaying(cur)) start(when, fadeIn);
   }
-  function hold(reason, active) {
-    if (!!holds[reason] === active) return;
-    if (active) { holds[reason] = true; lower('now', HOLD[reason].out); }
-    else { delete holds[reason]; raise('now', HOLD[reason].back); }
-  }
-  document.addEventListener('moai:drawer', function(e) { hold('sample', !!(e.detail.open && e.detail.page === 'sample')); });
 
   // ── 메인 BGM 파트 획득 (필드 보상 — 연결표 js/field-events.js) ──
   //   다음 파트를 얻고 { part, name, index, total, bgm } (다 모았으면 null)
@@ -309,7 +342,8 @@
     const part = MAIN_PARTS[partsOn++];
     const info = { part: part, name: PART_NAMES[part] || part, index: partsOn, total: MAIN_PARTS.length,
       bgm: BEATS[FIELD.id] ? BEATS[FIELD.id].name : FIELD.id };
-    if (partsOn === 1) unlocked[FIELD.id] = true;
+    if (partsOn === 1) unlockMany(UNLOCK.firstPart, 'firstPart');
+    partsFull();
     if (selected === FIELD.id && G.isBgmPlaying(cur)) {
       const name = cur, map = partsFor(FIELD.id);
       C.request({ at: G.bgmWhen(name, PART_WHEN) }, function() { G.setBgmParts(name, map); });
@@ -340,23 +374,31 @@
       if (!tempoLocked() && partsOn < MAIN_PARTS.length) {
         partsOn++;
         G.setBgmParts(cur, partsFor(FIELD.id));
+        partsFull();
         render();
       }
       scheduleBuild(tl);                   // 다음 경계 (템포 고정 중이었으면 건너뛰고 다음에)
     });
   }
 
-  // ── 비트 잠금 (사운드 해금형 보상의 자리) ──
-  //   unlock(id) = 그 비트를 풀고 { id, name } (이미 풀렸거나 없는 비트면 null)
+  // ── 잠금 (사운드 해금형 보상의 자리 — 무엇이 언제 열리는지는 위 UNLOCK · 곡 카드) ──
+  //   unlock(id) = 그 비트·곡을 풀고 { id, name } (이미 풀렸거나 없는 것이면 null)
   //   unlockRandom() = 잠긴 비트 중 하나를 무작위로 풀기 (모두 풀렸으면 null)
+  //   unlockAll() = 비트 · 곡 모두 풀기 (개발 탭 — 시험용), opened() = 비트 탭 조작이 열렸나, songs() = 곡 목록
+  // 곡 해금 보상 카드 (공용 등록부 js/rewards.js): song.<곡 ID> — 아직 잠겨 있을 때만 줄 수 있다
+  if (window.Moai.rewards) SONGS.forEach(function(id) {
+    window.Moai.rewards.register('song.' + id, { name: 'BGM ' + id, can: function() { return beatLocked(id); }, give: function() { unlockMany([id], 'card'); } });
+  });
   window.Moai.beats = {
     list: function() { return Object.keys(BEATS).map(function(id) { return { id: id, name: BEATS[id].name, locked: beatLocked(id) }; }); },
+    songs: function() { return SONGS.map(function(id) { return { id: id, name: id, locked: beatLocked(id) }; }); },
     locked: beatLocked,
+    opened: function() { return opened; },
+    unlockAll: function() { return unlockMany(Object.keys(BEATS).concat(SONGS), 'all'); },
     unlock: function(id) {
       if (!beatLocked(id)) return null;
-      unlocked[id] = true;
-      render();
-      return { id: id, name: BEATS[id].name };
+      unlockMany([id], 'api');
+      return { id: id, name: BEATS[id] ? BEATS[id].name : id };
     },
     unlockRandom: function() {
       const ids = Object.keys(BEATS).filter(beatLocked);

@@ -13,12 +13,12 @@
     palm:    { x: 0.81, y: 0.28, w: 0.35, rot: -13,  flip: true,  z: 3 },
     star:    { x: 0.81, y: 0.62, w: 0.48, rot: 0,    flip: false, z: 4 },
     moai:    { x: 0.57, y: 0.65, w: 0.42, rot: 0,    flip: false, z: 5, pivot: 0.37 },  // pivot = 반전 축 (상자 기준 — placedRect). 0.37 = 캔버스 x ≈ 0.515, 오른쪽을 보는 모습과 대칭으로 실화면에서 확정
-    ground:  { x: 0.50, y: 0.50, w: 1.00, rot: 0,    flip: false, z: 6 },
+    ground:  { x: 0.50, y: 0.92222, w: 1.00, rot: 0, flip: false, z: 6 },   // 보이는 띠만 자른 그림 (원본 1920×1440의 1216 ~ 1440행 — tools/asset-web.py --plain 이 알려 주는 값)
     clam:    { x: 0.20, y: 0.81, w: 0.43, rot: 0,    flip: true,  z: 7 },
     pigeon:  { x: 0.79, y: 0.84, w: 0.43, rot: 0,    flip: false, z: 8 },
   };
   // 이미지 높이/폭 비 (기본 1 = 정사각). 모아이 프레임은 1080×1920, 전경은 1920×1440 (캔버스 전체)
-  M.LAYOUT_ASPECT = { moai: 1920 / 1080, ground: 1440 / 1920 };
+  M.LAYOUT_ASPECT = { moai: 1920 / 1080, ground: 224 / 1920 };
 
   // 모아이 높이 (두더지 연출 토대): M.moaiHeight 0~1 (1 = 100% = 정상). 위치 = LAYOUT.moai.y + 오프셋(캔버스 높이 비, +가 아래)
   //   up = 100% 오프셋, down = 0% 오프셋 — 컨셉 아트 위치(y 0.65) 대비, 인게임 ↑/↓로 찾은 값 (100% y 0.60 / 0% y 1.00). 사이는 선형
@@ -124,13 +124,17 @@
   };
 
   // 배치 값대로 그리기 (중심 기준 회전·반전)
+  //   잘라 낸 그림: img.__box = 그 그림이 원래 상자의 어디였는지 [왼쪽, 위, 폭, 높이] (0~1) — 있으면 상자 전체가 아니라 그 자리에만 그린다
+  //     (빈 곳을 들고 있지 않으려고 보이는 부분만 남긴 그림 — 모아이 프레임: 데이터 파일 frames, js/sprite.js가 붙인다. 색 입힌 사본(js/tint.js)이 물려받는다)
+  //     배치 · 판정 · 마스크 · 악세사리는 모두 상자 기준이라 그림이 잘렸는지 모른다
   M.drawAt = function(ctx, img, p, aspect, W, H, dy) {
-    const r = M.placedRect(p, aspect, W, H, dy);
+    const r = M.placedRect(p, aspect, W, H, dy), b = img.__box;
     ctx.save();
     ctx.translate(r.cx, r.cy);
     if (r.rot) ctx.rotate(r.rot);
     if (p.flip) ctx.scale(-1, 1);
-    ctx.drawImage(img, -r.dw / 2, -r.dh / 2, r.dw, r.dh);
+    if (b) ctx.drawImage(img, (b[0] - 0.5) * r.dw, (b[1] - 0.5) * r.dh, b[2] * r.dw, b[3] * r.dh);
+    else ctx.drawImage(img, -r.dw / 2, -r.dh / 2, r.dw, r.dh);
     ctx.restore();
   };
   // 고정 배치(M.LAYOUT[id])대로 그리기. 모아이는 높이 오프셋(M.moaiDy()) 적용

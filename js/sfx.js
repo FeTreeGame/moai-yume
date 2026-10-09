@@ -77,6 +77,25 @@
     },
     risen:       function(t) { arp(t, [[88, 0.06], [93, 0.16]], { type: 'triangle', gain: 0.1 }); },
     reward:      function(t) { arp(t, [[96, 0.04], [100, 0.04], [103, 0.04], [108, 0.12]], { type: 'triangle', gain: 0.07 }); },
+    // 음표 하나의 판정 (연출 연결표 JUDGE) — 찰지게: 소리마다 세 겹 (때리는 순간의 딱 + 몸통 + 꼬리). 짧게 끊어 목소리(떽 · 뚜~)를 덮지 않는다
+    //   맞힘: 딱(높은 잡음) + 톡(낮게 떨어지는 몸통) + 반짝(두 음의 종소리 — ACE는 한 옥타브 위 음이 하나 더 붙어 더 밝다). o.grade = 'ace' | 'good'
+    noteHit:     function(t, o) {
+      const ace = !o || o.grade !== 'good';
+      noise(t, { filter: 'highpass', f0: 4500, q: 0.7, dur: 0.03, gain: 0.2, attack: 0.001 });
+      tone(t, { type: 'sine', f0: 260, f1: 120, dur: 0.07, gain: 0.2, attack: 0.002 });
+      arp(t, ace ? [[91, 0.035], [96, 0.035], [103, 0.11]] : [[88, 0.04], [93, 0.1]], { type: 'triangle', gain: 0.13, ring: 1.6 });
+    },
+    //   놓침: 툭(낮은 잡음) + 뿌—(거친 두 음이 살짝 어긋나 떨며 내려간다 — 틀렸다는 버저)
+    noteMiss:    function(t) {
+      noise(t, { filter: 'lowpass', f0: 600, q: 0.8, dur: 0.1, gain: 0.5, attack: 0.002 });
+      tone(t, { type: 'sawtooth', f0: 196, f1: 104, dur: 0.24, gain: 0.24, attack: 0.004 });
+      tone(t, { type: 'square', f0: 185, f1: 98, dur: 0.24, gain: 0.12, attack: 0.004 });
+    },
+    //   헛침: 휙(위에서 아래로 훑는 바람) + 톡(힘없이 떨어지는 작은 음)
+    noteWhiff:   function(t) {
+      noise(t, { f0: 3200, f1: 500, q: 2, dur: 0.14, gain: 0.7, attack: 0.01 });
+      tone(t, { type: 'triangle', f0: 620, f1: 300, dur: 0.07, gain: 0.14 });
+    },
     stepClear:   function(t) { arp(t, [[84, 0.07], [88, 0.16]], { type: 'square', gain: 0.08 }); },
     stepMiss:    function(t) { tone(t, { type: 'square', f0: 233, f1: 110, dur: 0.28, gain: 0.08 }); tone(t, { type: 'square', f0: 220, f1: 104, dur: 0.28, gain: 0.05 }); },
     complete:    function(t) { arp(t, [[72, 0.06], [76, 0.06], [79, 0.06], [84, 0.06], [88, 0.06], [91, 0.06], [96, 0.4]], { type: 'square', gain: 0.08 }); },
@@ -92,7 +111,7 @@
   M.sfx = {
     play: function(name, o) {
       const f = SFX[name];
-      if (!f) return null;
+      if (!f || M.audioHold) return null;   // 일시 정지 중에는 울리지 않는다 (쌓였다가 돌아올 때 한꺼번에 나오지 않게)
       const c = ctx(), t = o && o.at != null ? Math.max(o.at, c.currentTime) : c.currentTime + 0.005;
       return f(t, o || {}) || null;
     },

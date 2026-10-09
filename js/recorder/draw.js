@@ -185,13 +185,14 @@ function drawRealtimeWaveform(canvas, analyser, recStartTime, recDuration, offse
 // 전역 의존: activeSource, actx (recorder.js)
 var playbackAnim = null;
 
+// offsetSec = 시작 보정 (초) — 값 또는 함수. 함수면 프레임마다 읽는다 (재생 중에 보정을 옮겨도 파형과 함께 따라감)
+function offsetNow(offsetSec) { return (typeof offsetSec === 'function' ? offsetSec() : offsetSec) || 0; }
+
 function drawPlaybackIndicator(name, startTime, duration, totalCanvasDur, color, offsetSec) {
   var cv = document.getElementById('cvPlay-' + name);
   if (!cv) return;
   var ctx = cv.getContext('2d');
   var w = cv.width, h = cv.height;
-  var offSec = offsetSec || 0;
-  var startPx = Math.floor(w * offSec / totalCanvasDur);
 
   function frame() {
     if (!activeSource) {
@@ -199,6 +200,8 @@ function drawPlaybackIndicator(name, startTime, duration, totalCanvasDur, color,
       playbackAnim = null;
       return;
     }
+    var offSec = offsetNow(offsetSec);
+    var startPx = Math.floor(w * offSec / totalCanvasDur);
 
     var elapsed = actx.currentTime - startTime;
     var progress = Math.min((offSec + elapsed) / totalCanvasDur, 1);
@@ -229,12 +232,13 @@ function drawPlaybackIndicator(name, startTime, duration, totalCanvasDur, color,
   frame();
 }
 
-function drawLoopPlaybackIndicator(name, startTime, loopStart, loopEnd, totalCanvasDur, color, offsetSec) {
+// marks = 참이면 루프 선(시작 초록 · 끝 빨강)과 이름표도 이 구간에 임시로 띄운다 — 샘플을 루프로 듣는 동안
+//   (녹음이 있으면 평소 선 · 이름표는 내 녹음의 구간을 가리킨다. 멈추면 표시 캔버스가 지워지고 이름표는 평소 자리로 — playback.js stopActive)
+function drawLoopPlaybackIndicator(name, startTime, loopStart, loopEnd, totalCanvasDur, color, offsetSec, marks) {
   var cv = document.getElementById('cvPlay-' + name);
   if (!cv) return;
   var ctx = cv.getContext('2d');
   var w = cv.width, h = cv.height;
-  var offSec = offsetSec || 0;
   var loopLen = loopEnd - loopStart;
 
   function frame() {
@@ -243,6 +247,7 @@ function drawLoopPlaybackIndicator(name, startTime, loopStart, loopEnd, totalCan
       playbackAnim = null;
       return;
     }
+    var offSec = offsetNow(offsetSec);
 
     var elapsed = actx.currentTime - startTime;
     var pos;
@@ -261,6 +266,14 @@ function drawLoopPlaybackIndicator(name, startTime, loopStart, loopEnd, totalCan
     var lePx = Math.floor(w * (offSec + loopEnd) / totalCanvasDur);
     ctx.fillStyle = color;
     ctx.fillRect(lsPx, 0, lePx - lsPx, h);
+
+    if (marks) {                                   // 이 구간의 선 · 이름표 (임시)
+      [[lsPx, '#4caf50'], [lePx, '#f44336']].forEach(function(m) {
+        ctx.strokeStyle = m[1]; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(m[0], 0); ctx.lineTo(m[0], h); ctx.stroke();
+      });
+      if (typeof setLoopLabels === 'function') setLoopLabels(name, (offSec + loopStart) / totalCanvasDur, (offSec + loopEnd) / totalCanvasDur);
+    }
 
     // 인디케이터 라인
     ctx.strokeStyle = '#fff';

@@ -7,6 +7,7 @@
   --phosphor-dim: #1a8a0a;
   --phosphor-glow: rgba(57, 255, 20, 0.15);
   --coral: #ff4757;
+  --blue: #4a9eff;
   --cyan: #4ecdc4;
   --text: #c8c8d0;
   --text-dim: #6a6a7a;
@@ -16,6 +17,31 @@
   --canvas-w: 480px;
   --canvas-h: 360px;
   --ui-unit: 12px;
+
+  /* 드로어 UI 기준값 — 드로어 안의 크기는 이 값만 쓴다 (요소마다 따로 정하지 않음. 바꿀 때는 논의 → 결정 기록)
+     글자는 게임 화면 크기와 무관 (화면 위 요소만 --ui-unit을 따름).
+     버튼 묶음의 칸 = 그 묶음에서 가장 긴 이름이 들어가는 폭 (--chars — 반각 글자 수, 한글 = 2. 묶음마다 index.html에서) →
+     열 수는 드로어 폭에서 저절로 (넓으면 여러 열, 좁으면 줄어듦 — 글자를 줄이지 않는다).
+     열 수를 정해 두는 묶음은 --cols 로 (예: 비트 2 × 2) */
+  --d-font: 13px;        /* 본문 · 버튼 글자 */
+  --d-font-sub: 11px;    /* 소제목 · 보조 글자 */
+  --d-font-value: 16px;  /* 강조 값 (BPM) */
+  --d-btn-h: 32px;       /* 버튼 높이 · 슬라이더 줄 높이 */
+  --d-btn-h-main: 48px;  /* 그 탭에서 가장 중요한 버튼 하나 (녹음 탭의 녹음하기 · 들어보기) */
+  --d-vslider-h: 96px;   /* 세로 슬라이더의 길이 (믹서의 세부 채널) */
+  --d-gap: 6px;          /* 버튼 사이 · 줄 사이 */
+  --d-group-gap: 16px;   /* 묶음 사이 */
+  --d-pad-x: 8px;        /* 버튼 안쪽 좌우 */
+  --d-letter: 0.5px;     /* 버튼 글자 사이 */
+  --d-step-w: var(--d-btn-h);   /* 값 넘기기 줄의 양옆 버튼 폭 (= 버튼 높이 — 정사각) */
+  --d-radius: 2px;       /* 버튼 모서리 */
+  --d-border: 1px;       /* 버튼 테두리 */
+  --j-ace: #ffd700; --j-good: #39ff14; --j-barely: #ff9500;   /* 판정 등급의 색 (설정 탭의 범위 그림 — 게임의 판정 결과 색과 같게: js/rhythm/hud.js RES_COLOR) */
+  --d-bound-h: 64px;     /* 판정 범위 그림의 높이 */
+  --pad-w: 132px; --pad-h: 96px; --pad-inset: 12px; --pad-gap: 8px;   /* 화면 위에 띄운 조작 버튼(js/pad.js)의 크기 · 화면 가장자리에서의 거리 */
+  --d-on: var(--phosphor);            /* 켜짐 · 선택됨 · 재생 중 · 완료 — 글자 */
+  --d-on-border: var(--phosphor-dim); /* 켜짐의 테두리 (글자보다 어둡게 — 밝은 테두리는 너무 튐) */
+  --d-ask-fill: 45%;                  /* 예 · 아니오를 누르거나 올렸을 때 채우는 색의 세기 (테두리보다 어둡게) */
 }
 
 body {
@@ -45,6 +71,8 @@ body::after {
 
 /* === 캔버스 (뷰포트 내 적응형 배치) === */
 .sprite-box {
+  /* 필드 게이지의 자리 (상자 높이의 비) — 게이지 · 그 아래 문구 · 게이지 끝의 표시가 모두 이 값을 읽는다. 게이지를 옮길 때 고칠 곳은 여기 하나 (별은 js/fx-rules.js가 게이지의 실제 자리를 읽는다) */
+  --gauge-top: 2.5%; --gauge-h: 4.5833%; --gauge-gap: 1.4583%;   /* 위 여백 (예전 1.4583% = 14/960 → 24/960) · 두께 · 문구까지의 간격 */
   position: fixed;
   left: var(--sprite-left, 50%);
   top: var(--sprite-top, 50%);
@@ -80,18 +108,19 @@ body::after {
   pointer-events: none;
 }
 
-/* 필드 게이지 (js/field-gauge.js): 캔버스 상단 — 가이드 막대(rhythm/hud.js, 1280×960 논리: 폭 840 가운데·줄 높이 22·아래 여백 14)와 위아래 대칭
-   불투명도·채움 너비는 스크립트가 정한다 (처음 = 0 — 첫 게이지를 채우며 드러남) */
+/* 필드 게이지 (js/field-gauge.js): 캔버스 상단 — 가이드(rhythm/guide.js, 1280×960 논리: 폭 840 가운데)와 같은 폭
+   모양: 흰 둥근 테두리 안에 노란 채움 (두께 = 캔버스 높이의 4.58%). 불투명도·채움 너비는 스크립트가 정한다 (처음 = 0 — 첫 게이지를 채우며 드러남) */
 .field-gauge {
-  position: absolute; left: 17.1875%; width: 65.625%; top: 1.4583%; height: 2.2917%;
+  position: absolute; left: 17.1875%; width: 65.625%; top: var(--gauge-top); height: var(--gauge-h); box-sizing: border-box;
   background: rgba(16,14,36,0.85); overflow: hidden;
+  border: calc(var(--canvas-h) * 0.0045) solid #ffffff; border-radius: 999px;
   opacity: 0; pointer-events: none;
 }
 .field-gauge.hidden { display: none; }
-.field-gauge-fill { width: 0; height: 100%; background: #ffd700; }
+.field-gauge-fill { width: 0; height: 100%; background: #ffd700; border-radius: 999px; }
 /* 홀드 미션 문구 (js/field-gauge.js — HOLD NOW! / KEEP HOLDING!): 게이지 바로 아래 가운데, 자리 표시 */
 .field-gauge-cue {
-  position: absolute; left: 0; right: 0; top: var(--field-cue-top, 5px); text-align: center;
+  position: absolute; left: 0; right: 0; top: calc(var(--gauge-top) + var(--gauge-h) + var(--gauge-gap)); text-align: center;
   color: rgba(255, 120, 149, 1); font-weight: bold; letter-spacing: var(--field-cue-letter-spacing, 2px);
   font-size: var(--field-cue-font-size, 22px);
   text-shadow: 0 var(--field-cue-shadow-y, 2px) 0 rgba(0, 0, 0, 0.6);
@@ -100,6 +129,50 @@ body::after {
 }
 .field-gauge-cue.hidden { display: none; }
 .field-gauge-cue.cue-ready { opacity: 1; }
+
+/* 분위기 층 (js/atmo.js): 화면 전체의 색 입힘 · 조명 — 캔버스 바로 위, HUD 아래 */
+.atmo { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* 진하기 = 바탕(--atmo-a: 턴 · 미션에 따라 CSS 전환으로 바뀐다) + 반응(--atmo-n: 판정에 잠깐 더해졌다 돌아온다 — 웹 애니메이션). 두 값을 따로 둔다 — opacity 하나를 둘이 움직이면 서로 덮는다 (js/atmo.js)
+   값이 부드럽게 바뀌려면 숫자로 등록되어 있어야 한다 (@property — 없는 브라우저에서는 전환 없이 바로 바뀐다) */
+@property --atmo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --atmo-n { syntax: '<number>'; inherits: false; initial-value: 0; }
+.atmo-shade { position: absolute; inset: 0; mix-blend-mode: multiply; background-color: transparent; opacity: calc(var(--atmo-a) + var(--atmo-n));
+  transition-property: background-color, --atmo-a; transition-timing-function: linear; transition-duration: 0.4s; }
+.atmo-tint { position: absolute; inset: 0; mix-blend-mode: overlay; background-color: transparent; opacity: calc(var(--atmo-a) + var(--atmo-n));
+  transition-property: background-color, --atmo-a; transition-timing-function: linear; transition-duration: 0.4s; }
+.atmo-spot { position: absolute; inset: -12%; opacity: calc(var(--atmo-a) + var(--atmo-n)); transform-origin: 50% 46%;
+  background: radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 24%, rgba(6,4,24,0.9) 88%);
+  transition-property: --atmo-a; transition-timing-function: linear; transition-duration: 0.4s; }
+
+.atmo-world { position: absolute; inset: 0; transform-origin: 0 0; mix-blend-mode: screen; pointer-events: none; }
+.atmo-screen { position: absolute; inset: 0; mix-blend-mode: screen; pointer-events: none; }   /* 화면에 고정된 틀 — 미니의 빛줄기 */   /* 세계를 따르는 틀 — 카메라의 변환을 그대로 받는다. 밝게 섞기는 틀에 (변환이 걸린 틀 안에서는 바깥과 섞이지 않는다) */
+.atmo-beam { position: absolute; top: -12%; left: 50%; width: 54%; height: 78%; margin-left: -27%; opacity: 0;
+  filter: blur(calc(var(--canvas-h) * 0.006)); transform-origin: 50% 100%; transition-property: opacity; transition-timing-function: linear; transition-duration: 0.4s; }
+.atmo-beam-in { position: absolute; inset: 0; --beam: #fff4cf; --top: 6%; --hold: 0%; --mid: 62%; --mida: 0.6; transform-origin: 50% 100%; clip-path: polygon(calc(50% - var(--top)) 0, calc(50% + var(--top)) 0, 96% 100%, 4% 100%);
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,0) 0 9%, rgba(255,255,255,0.4) 9% 11.5%, rgba(255,255,255,0) 11.5% 27%), linear-gradient(var(--beam), var(--beam));
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.95) var(--hold), rgba(0,0,0,var(--mida)) var(--mid), rgba(0,0,0,0) 100%); mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.95) var(--hold), rgba(0,0,0,var(--mida)) var(--mid), rgba(0,0,0,0) 100%);
+  transition-property: transform, clip-path; transition-timing-function: ease-out; transition-duration: 0.4s; }
+/* 테두리 이펙트 (js/frame-fx.js): 캔버스 안쪽 가장자리의 선 — 루프 막대 위, 게이지 · HUD 아래 */
+.frame-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* 정보 HUD (js/hud-info.js): 턴 · 남은 박 — 게이지 아래 한 줄 (세션에서는 위 띠 안). 글꼴 · 그림자는 게이지 아래 문구와 같은 톤 */
+.hud-info { position: absolute; left: 6%; right: 6%; top: 15.5%; height: calc(var(--canvas-h) * 0.05);
+  display: flex; align-items: center;
+  color: #fff; font-weight: bold; font-size: max(12px, calc(var(--canvas-h) * 0.03)); letter-spacing: calc(var(--canvas-h) * 0.003);
+  text-shadow: 0 calc(var(--canvas-h) * 0.004) 0 rgba(0,0,0,0.6); pointer-events: none; }
+.hud-info.hidden { display: none; }
+.hud-info.in-session { top: calc(var(--lb) / 2); left: 50%; right: auto; transform: translate(-50%, -50%);   /* 세션: 위 띠의 세로 가운데 (띠의 높이 --lb는 js/camera.js가 넣는다) · 가로도 가운데 (예전: 왼쪽 끝 14% 고정 — 위쪽 양 구석에 기회 · 단계 표시가 들어오면서 가운데로) */
+  font-size: max(13px, calc(var(--canvas-h) * 0.036)); }   /* 필드의 것(0.03)보다 조금 크게 — 띠에 비해 작았다 */
+.hud-info.in-session .hud-turn { gap: calc(var(--canvas-h) * 0.015); }
+.hud-info.in-session .hud-dots { gap: calc(var(--canvas-h) * 0.0085); }
+.hud-info.in-session .hud-dots i { width: calc(var(--canvas-h) * 0.017); height: calc(var(--canvas-h) * 0.017); }
+.hud-turn { justify-self: start; display: flex; align-items: center; gap: calc(var(--canvas-h) * 0.012); white-space: nowrap; }
+.hud-dots { display: inline-flex; gap: calc(var(--canvas-h) * 0.007); }
+.hud-dots i { width: calc(var(--canvas-h) * 0.014); height: calc(var(--canvas-h) * 0.014); border-radius: 50%; background: rgba(255,255,255,0.22); box-shadow: 0 1px 0 rgba(0,0,0,0.5); }
+.hud-dots i.on { background: #fff; }
+.hud-next { position: absolute; left: 83.6%; top: var(--gauge-top); height: var(--gauge-h); display: flex; align-items: center; color: #fff; font-weight: bold;
+  font-size: max(11px, calc(var(--canvas-h) * 0.026)); text-shadow: 0 2px 0 rgba(0,0,0,0.6); pointer-events: none; opacity: 0.9; }
+.hud-next.hidden { display: none; }
 
 /* 인카운터 임시 HUD (1단계: 텍스트) */
 .enc-hud {
@@ -113,13 +186,17 @@ body::after {
 
 /* 카메라 화면 층 오버레이 (js/camera.js — 필드 캔버스 바로 위, 가이드 막대·게이지·HUD 아래): 레터박스·비네트 */
 .cam-overlay { position: absolute; inset: 0; pointer-events: none; transition-property: opacity, transform; transition-timing-function: ease-out; }
+/* 레터박스의 띠: 제 크기로 그려 둔 것을 화면 밖에서 밀어 넣는다 (예전: 세로 배율 0 → 1로 키움 — 모바일에서 등장하는 순간 띠가 깜빡였다. docs/SCREEN-LAYERS.md)
+   늘 따로 떼어 둔 층 (will-change) — 움직이기 시작할 때 층이 새로 생기지 않게. 전환은 띠가 직접 갖는다 (부모에게서 물려받지 않는다). 길이 --lb-dur · 높이 --lb는 js/camera.js가 넣는다 */
+.cam-letterbox { overflow: hidden; }
 .cam-letterbox::before, .cam-letterbox::after {
   content: ''; position: absolute; left: 0; right: 0; height: var(--lb, 10%); background: #000;
-  transform: scaleY(0); transition: inherit;
+  will-change: transform; transition: transform var(--lb-dur, 0.4s) ease-out;
 }
-.cam-letterbox::before { top: 0; transform-origin: top; }
-.cam-letterbox::after { bottom: 0; transform-origin: bottom; }
-.cam-letterbox.on::before, .cam-letterbox.on::after { transform: scaleY(1); }
+.cam-letterbox::before { top: 0; transform: translateY(-101%); }
+.cam-letterbox::after { bottom: 0; transform: translateY(101%); }
+.cam-letterbox.on::before, .cam-letterbox.on::after { transform: translateY(0); }
+.cam-letterbox.top-only::after, .cam-letterbox.on.top-only::after { transform: translateY(101%); }   /* 위쪽 띠만 (만든 세션 — 아래 띠가 구구를 가린다) */
 .cam-vignette { opacity: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,var(--vg, 0.55)) 100%); }
 .cam-vignette.on { opacity: 1; }
 .sprite-status {
@@ -129,6 +206,39 @@ body::after {
   color: var(--phosphor-dim);
   transition: opacity 0.6s;
 }
+
+/* 치장 탭 (js/dress.js): 캔버스 위 오버레이 — 모아이 옆 (캔버스 오른쪽). 드로어와 같은 재질 · 같은 부품
+   제목 = 드로어의 섹션 제목 / 칸 = 드로어 버튼의 테두리 (켜짐 = 켜짐의 톤) / 아래 = 선택 · 취소 (드로어의 예 · 아니오와 같은 버튼)
+   크기는 캔버스를 따라간다 (세션의 하트 · 단계 칸처럼 캔버스 높이의 비) — 드로어 기준값(--d-*)을 이 안에서 캔버스 비로 다시 정해 같은 규칙이 그 크기로 그려진다
+   크기 · 자리: 칸 3행 2열 = 여섯 칸, 세로 가운데 = 캔버스의 세로 가운데 (top 50%), 모아이의 오른쪽에 나란히 — 모아이와의 사이 · 캔버스 오른쪽 끝과의 사이가 같게
+     (모아이 판정 상자: 가운데 x 0.507 · 폭 0.294 → 오른쪽 끝 0.654, 가운데 y 0.59 · 높이 0.637 — 캔버스 비. 탭의 폭 = 캔버스 폭의 약 21.7% → 양쪽 여백 약 6.5%씩) */
+.dress { --d-btn-h: calc(var(--canvas-h) * 0.06); --d-font: calc(var(--canvas-h) * 0.027); --d-font-sub: calc(var(--canvas-h) * 0.024);
+  --d-gap: calc(var(--canvas-h) * 0.011); --d-group-gap: calc(var(--canvas-h) * 0.024); --d-pad-x: calc(var(--canvas-h) * 0.014);
+  --d-letter: calc(var(--canvas-h) * 0.001); --d-radius: calc(var(--canvas-h) * 0.004);
+  --dress-cell: calc(var(--canvas-h) * 0.115);
+  position: absolute; z-index: 30; top: 50%; transform: translateY(-50%); box-sizing: border-box; padding: var(--d-group-gap);
+  display: flex; flex-direction: column; gap: var(--d-gap);
+  background: rgba(10, 10, 18, 0.88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: var(--d-border) solid rgba(255,255,255,0.08); border-radius: calc(var(--canvas-h) * 0.018);
+  color: var(--text); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.dress-right { right: 6.45%; }   /* 치장 — 모아이의 오른쪽 */
+.dress-left { left: 7.15%; }     /* 배경 — 모아이의 왼쪽 (모아이 판정 상자의 왼쪽 끝 0.36 — 캔버스 왼쪽 끝과의 사이 · 모아이와의 사이가 같게) */
+.dress.hidden { display: none; }
+.dress-title { font-size: var(--d-font-sub); color: var(--text-dim); letter-spacing: calc(var(--canvas-h) * 0.002); }
+.dress-grid { display: grid; grid-template-columns: repeat(2, var(--dress-cell)); grid-auto-rows: var(--dress-cell); gap: var(--d-gap); }
+.dress-cell { display: grid; aspect-ratio: 1; padding: var(--d-gap); background: transparent; cursor: pointer;
+  border: var(--d-border) solid var(--text-dim); border-radius: var(--d-radius); transition: border-color 0.15s; }
+.dress-cell img { grid-area: 1 / 1; display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; pointer-events: none; }   /* 묶음 = 그림 여럿을 같은 자리에 겹침 */
+.dress-cell:hover { border-color: var(--cyan); }
+.dress-cell.on { border-color: var(--d-on-border); background: color-mix(in srgb, var(--d-on) 8%, transparent); }
+.dress-art { grid-area: 1 / 1; place-self: center; position: relative; display: block; pointer-events: none; }   /* 묶음: 그림들을 화면에서의 서로의 자리 · 크기 그대로 (js/scenery.js slots의 box) */
+.dress-art img { position: absolute; object-fit: fill; }
+.dress-cell img.lock { filter: brightness(0); opacity: 0.45; }   /* 아직 얻지 않은 것 = 실루엣 (검정 + 반투명) */
+.dress-cell.locked { border-style: dashed; cursor: default; }
+.dress-cell.locked:hover { border-color: var(--text-dim); }
+.dress-cell.empty { border-style: dashed; opacity: 0.4; cursor: default; }   /* 빈 칸 */
+.dress-cell.empty:hover { border-color: var(--text-dim); }
+.dress-grid .ctrl-btn { width: 100%; height: 100%; min-height: 0; padding: 0; background: transparent; letter-spacing: var(--d-letter); }   /* 선택 · 취소 = 치장의 마지막 두 칸 */
 
 /* === 드로어 토글 버튼 === */
 .drawer-toggle {
@@ -165,6 +275,60 @@ body::after {
 }
 
 
+
+/* 조작 버튼 보이기 (js/pad.js): 드로어 버튼과 좌우 대칭 — 같은 모양 · 크기, 자리만 왼쪽 */
+.drawer-toggle.pad-toggle { right: auto; left: 12px; }
+.drawer-toggle.hidden { display: none; }
+/* 화면 위의 조작 버튼: 아래 양쪽 구석 (왼쪽 = 떽!, 오른쪽 = 뚜~웡 — 키 Z · X의 차례). 틀은 누름을 받지 않는다 (사이로 캔버스가 눌림)
+   층: 캔버스(41 · 42)보다 위, 드로어(45)보다 아래 — 드로어가 열리면 드로어가 덮는다 (비켜 서지 않는다) */
+.pad-overlay { position: fixed; z-index: 44; left: var(--pad-inset); right: var(--pad-inset); bottom: var(--pad-inset);
+  display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; }
+.pad-overlay.hidden { display: none; }
+.pad-overlay .play-area { pointer-events: auto; flex: none; width: var(--pad-w); min-height: var(--pad-h);
+  background: rgba(10, 10, 18, 0.35); }   /* 반투명 — 뒤의 캔버스 요소를 가리지 않게 (예전: 0.7 + 뒤를 흐리는 블러). 글자는 그림자로 읽히게 */
+.pad-overlay .play-label, .pad-overlay .play-hint { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.6); }
+.pad-overlay .play-hint { color: var(--d-on); opacity: 0.85; }
+/* 나가기 (js/rhythm/session.js): 떽! 버튼의 바로 위 — 같은 크기, --pad-gap만큼 띄워서. 길게 누르는 동안 바탕이 아래에서 위로 차오른다 (길이 --exit-hold는 스크립트가 넣는다), 떼면 빠르게 비워진다
+   색은 빨강 (--exit-color) — 조작 버튼(초록)과 다른 일을 하는 버튼 */
+.pad-overlay .pad-exit { --exit-color: #ff405b; --exit-glow: rgba(255, 64, 91, 0.45);
+  position: absolute; left: 0; bottom: calc(100% + var(--pad-gap)); height: 100%; box-sizing: border-box; overflow: hidden; border-color: rgba(255, 64, 91, 0.55); }
+.pad-overlay .pad-exit:hover { border-color: var(--exit-color); box-shadow: 0 0 16px var(--exit-glow); }
+.pad-overlay .pad-exit:active, .pad-overlay .pad-exit.holding { border-color: var(--exit-color); box-shadow: 0 0 24px var(--exit-glow), inset 0 0 12px var(--exit-glow); }
+.pad-overlay .pad-exit .play-label, .pad-overlay .pad-exit .play-hint { color: var(--exit-color); }
+.pad-overlay .pad-exit .play-key { color: var(--exit-color); border-color: rgba(255, 64, 91, 0.45); }
+.pad-overlay .pad-exit.hidden { display: none; }
+.pad-exit-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(255, 64, 91, 0.4); pointer-events: none; transition: height 0.15s linear; }
+.pad-exit.holding .pad-exit-fill { height: 100%; transition: height var(--exit-hold, 2s) linear; }
+.pad-exit .play-label, .pad-exit .play-hint { position: relative; }   /* 차오르는 바탕보다 위에 */
+
+/* 일시 정지의 덮개 (js/pause.js): 화면을 떠났다 돌아오면 떠 있다 — 누르면 이어진다. 평범한 반투명 (혼합 · 흐림 없음) */
+.pause-cover { position: fixed; inset: 0; z-index: 15000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(6, 6, 14, 0.78); color: #fff; font-weight: bold; text-align: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pause-cover.hidden { display: none; }
+/* 시작 덮개 (js/pause.js): 캔버스가 처음 드러났을 때 그 위에 — 투명, 글자만 (캔버스의 한가운데 · 그림자로 읽히게 · 3초 주기로 천천히 깜빡임). 누르면 소리 장치를 켜고 걷힌다 */
+.start-cover { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.start-cover.hidden { display: none; }
+.start-hint { color: #fff; font-weight: bold; font-size: max(16px, calc(var(--canvas-h) * 0.085)); letter-spacing: 0.2em; padding-left: 0.2em; white-space: nowrap;
+  text-shadow: 0 calc(var(--canvas-h) * 0.004) 0 rgba(0,0,0,0.8), 0 0 calc(var(--canvas-h) * 0.02) rgba(0,0,0,0.7); animation: start-blink 3s ease-in-out infinite; }
+@keyframes start-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }   /* 천천히 (처음 1.4초 — 너무 짧았다) */
+.pause-title { font-size: clamp(28px, 7vmin, 64px); letter-spacing: 0.2em; padding-left: 0.2em; }
+.pause-hint { font-size: clamp(12px, 2.4vmin, 20px); letter-spacing: 0.25em; padding-left: 0.25em; opacity: 0.8; }
+
+/* 세션 만들기 (js/custom-session.js — 제작 탭의 아래쪽): 도구 줄 · 슬롯 줄 · 격자 8칸 × 4줄 */
+.maker { display: flex; flex-direction: column; gap: var(--d-gap); }
+.maker-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--d-gap); }
+.maker-slots .ctrl-btn.editing { background: color-mix(in srgb, var(--d-on) 22%, var(--ground)); }   /* 편집 중인 슬롯 (켜진 것 중에서) */
+.maker-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.maker-grid.off { opacity: 0.3; pointer-events: none; }                    /* 슬롯을 고르기 전 */
+.maker-cell { position: relative; aspect-ratio: 1; border: var(--d-border) solid rgba(255,255,255,0.22); border-radius: var(--d-radius); background: var(--ground-lighter); cursor: pointer; }
+.maker-cell:nth-child(4n+1) { border-left-color: rgba(255,255,255,0.6); }  /* 박의 머리 (네 칸마다) */
+.maker-cell.locked { background: repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 4px, transparent 4px 8px); border-style: dashed; cursor: default; opacity: 0.5; }   /* 마지막 한 박 — 둘 수 없다 */
+/* 찍힌 칸 = 사각형을 그 음표의 색으로 채운다 (색은 스크립트가 게임의 막대와 같은 것으로 넣는다 — 떽 · 어택 · 유지 · 릴리즈) */
+.maker-cell.filled { border-color: rgba(255,255,255,0.75); }
+.maker-cell.pending { border-color: #fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85); }   /* 걸어 둔 어택 (떼는 자리를 기다리는 중) */
+.maker-note { font-size: var(--d-font-sub); color: var(--text-dim); letter-spacing: 1px; min-height: 1.4em; }
+
 /* === 드로어 백드롭 (열렸을 때) === */
 .drawer-backdrop {
   position: fixed;
@@ -183,6 +347,7 @@ body::after {
 
 /* === 패널 드로어 === */
 .panel {
+  --ui-unit: var(--d-font);   /* 드로어 안의 글자 기준 = 기준값 (게임 화면 크기를 따르지 않음) */
   position: fixed;
   z-index: 45;
   display: flex;
@@ -230,54 +395,35 @@ body::after {
 /* === 패널 내부 요소 === */
 
 /* Play area */
+/* 조작 버튼 (화면 위의 분리 버튼 — js/pad.js): 이름(나는 소리) / 누르는 법 — 가운데로. 구석 = 키 */
 .play-area {
-  width: 100%;
-  padding: calc(var(--ui-unit) * 1.5) calc(var(--ui-unit) * 1.2);
-  border: 1px solid var(--phosphor-dim); border-radius: 4px;
+  position: relative; padding: var(--d-gap) var(--d-pad-x);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: var(--d-border) solid var(--d-on-border); border-radius: var(--d-radius);
   background: var(--ground-lighter); text-align: center;
   cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
-  touch-action: none;
+  touch-action: none; user-select: none; -webkit-user-select: none;
 }
 .play-area:hover { border-color: var(--phosphor); box-shadow: 0 0 16px var(--phosphor-glow); }
 .play-area:active, .play-area.active { border-color: var(--phosphor); box-shadow: 0 0 24px var(--phosphor-glow), inset 0 0 12px var(--phosphor-glow); }
-.play-label {
-  font-size: calc(var(--ui-unit) * 1.1);
-  color: var(--phosphor); letter-spacing: 2px; text-transform: uppercase; pointer-events: none;
-}
+.play-label { font-size: var(--d-font-value); line-height: 1.2; color: var(--d-on); letter-spacing: var(--d-letter); pointer-events: none; white-space: nowrap; }
 .play-hint {
-  font-size: var(--ui-unit);
-  color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; pointer-events: none;
+  font-size: var(--d-font-sub); line-height: 1.2; color: var(--text-dim); letter-spacing: var(--d-letter); pointer-events: none;
   word-break: keep-all; overflow-wrap: break-word;
 }
+/* 키 표시: 마우스가 있는 기기에서만 (손가락으로 누르는 기기엔 뜻이 없다) */
+.play-key { display: none; position: absolute; right: 4px; bottom: 4px; min-width: 1.6em; padding: 1px 3px; pointer-events: none;
+  font-size: var(--d-font-sub); line-height: 1.2; color: var(--text-dim); border: var(--d-border) solid var(--text-dim); border-radius: var(--d-radius); opacity: 0.7; }
+html.has-mouse .play-key { display: block; }   /* 판별은 js/state.js (Moai.device) 한 곳 */
 
-/* Play split (2-button) */
-.play-split {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-}
-.play-area--half {
-  flex: 1;
-  min-width: 0;
-}
-.play-area.hidden, .play-split.hidden { display: none; }
 
-/* 모드 전환 (단일 ↔ 분리) */
+/* 한 줄을 다 쓰는 버튼 (개발 탭) */
 .mode-toggle { width: 100%; }
-
-/* Feedback */
-.feedback {
-  font-size: calc(var(--ui-unit) * 1.2);
-  height: calc(var(--ui-unit) * 1.8);
-  color: var(--cyan); letter-spacing: 1px;
-}
-.feedback.tap-fb { color: var(--coral); }
-.feedback.hold-fb { color: var(--phosphor); }
 
 /* Original mode */
 .original-sound-summary {
-  background: var(--ground-lighter); border-radius: 4px; padding: 6px 10px; margin-bottom: 8px;
-  font-size: calc(var(--ui-unit) * 0.85);
+  background: var(--ground-lighter); border-radius: 4px; padding: 6px 10px;
+  font-size: var(--d-font-sub);
 }
 .original-sound-row {
   display: flex; justify-content: space-between; align-items: center;
@@ -308,16 +454,22 @@ body::after {
 }
 
 /* Controls */
-.ctrl-btn {
-  font-family: inherit;
-  font-size: var(--ui-unit);
-  letter-spacing: 1px; text-transform: uppercase;
-  color: var(--text-dim); background: transparent; border: 1px solid var(--text-dim);
-  border-radius: 2px; padding: 4px 10px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+/* 버튼 공통 (기준값): 높이 고정 · 글자 한 가지 크기 · 한 줄 (칸이 글자를 따라 늘지 않음 — 넘치면 말줄임) */
+.ctrl-btn, .beat-pattern-btn {
+  height: var(--d-btn-h); min-width: 0;
+  padding: 0 var(--d-pad-x);
+  font-family: inherit; font-size: var(--d-font); line-height: 1;
+  border: var(--d-border) solid var(--text-dim); border-radius: var(--d-radius);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
   touch-action: manipulation;
 }
+.ctrl-btn {
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim); background: transparent;
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
 .ctrl-btn:hover, .ctrl-btn:focus-visible { color: var(--cyan); border-color: var(--cyan); outline: none; }
-.ctrl-btn.active { color: var(--phosphor); border-color: var(--phosphor); }
+.ctrl-btn.active { color: var(--d-on); border-color: var(--d-on-border); }   /* 켜짐의 톤은 하나 (--d-on · --d-on-border) */
 
 /* === 드로어 탭 바 === */
 .drawer-tabs {
@@ -344,6 +496,9 @@ body::after {
   transition: color 0.15s, border-color 0.15s;
   touch-action: manipulation;
 }
+.drawer-tab.hidden { display: none; }
+/* 이탈 방어 (js/leave-guard.js): 화면을 당겨 새로고침하는 동작을 끔 */
+html.no-pull-refresh, html.no-pull-refresh body { overscroll-behavior: none; }
 .drawer-tab:hover { color: var(--text); }
 .drawer-tab.active {
   color: var(--phosphor);
@@ -385,14 +540,18 @@ body::after {
   touch-action: none;
   display: flex;
   flex-direction: column;
-  gap: calc(var(--ui-unit) * 1.1);
+  gap: var(--d-gap);
   padding: 8px 14px;
 }
-/* 커스텀 스크롤 트랙: 별도 터치 영역 */
+.drawer-scroll-content > * { flex-shrink: 0; }   /* 넘치면 스크롤 — 요소를 눌러 줄이지 않는다 */
+/* 커스텀 스크롤 트랙: 별도 터치 영역 — 손가락만 쓰는 기기에서만 보인다 (판별: js/state.js Moai.device)
+   그 밖(PC)은 커스텀 막대를 숨기고 브라우저의 스크롤을 그대로 쓴다 (넘칠 때 기본 스크롤 막대 · 휠) */
+html:not(.handheld) .scroll-track { display: none; }
+html:not(.handheld) .drawer-scroll-content { overflow-y: auto; touch-action: auto; }
 .scroll-track {
   width: 28px;
   flex-shrink: 0;
-  background: var(--ground-lighter);
+  background: transparent;   /* 드로어 바탕 그대로 — 자리는 왼쪽 선으로만 */
   border-left: 1px solid rgba(255,255,255,0.08);
   position: relative;
   touch-action: none;
@@ -426,47 +585,36 @@ body::after {
 /* 버튼 영역: 하단 고정, 스크롤 밖 */
 .drawer-actions {
   flex-shrink: 0;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-  padding: 10px 0;
-  border-top: 1px solid rgba(255,255,255,0.12);
-  background: rgba(10, 10, 18, 0.95);
+  width: 100%;
   touch-action: manipulation;
 }
+.drawer-actions:empty { display: none; }
 
 /* === 비트 페이지 === */
-.beat-patterns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* 버튼 묶음 = 균등한 칸: 칸의 최소 폭 = 가장 긴 이름(--chars)이 들어가는 폭, 그 폭으로 들어가는 만큼 열을 두고 남는 폭은 고르게 나눔
+   (한 묶음 안의 버튼은 늘 같은 크기 · 버튼이 칸을 채움 · 하나뿐이면 줄 전체) */
+.beat-patterns, .beat-pattern-row, .beat-controls, .slot-controls {
+  --cell: calc(var(--chars, 6) * (1ch + var(--d-letter)) + 2 * var(--d-pad-x) + 2 * var(--d-border));
+  display: grid;
+  grid-template-columns: repeat(var(--cols, auto-fit), minmax(min(100%, var(--cell-min, var(--cell))), 1fr));
+  gap: var(--d-gap);
   width: 100%;
+  font-size: var(--d-font);   /* 1ch의 기준 */
 }
 /* 리듬 세션: 스테이지(계열)당 한 행 */
-#trialPatterns { flex-direction: column; }
-.beat-pattern-row {
-  display: flex;
-  gap: 4px;
-}
+#trialPatterns { display: flex; flex-direction: column; }
 .beat-pattern-btn {
-  font-family: inherit;
-  font-size: calc(var(--ui-unit) * 0.85);
-  letter-spacing: 0.5px;
+  letter-spacing: var(--d-letter);
   color: var(--text-dim);
   background: transparent;
-  border: 1px solid var(--text-dim);
-  border-radius: 2px;
-  padding: 4px 8px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
-  touch-action: manipulation;
 }
 .beat-pattern-btn:hover { color: var(--text); border-color: var(--text); }
+.beat-pattern-btn.beat-main { grid-column: 1 / -1; }   /* 메인 BGM — 묶음 맨 위에 줄 전체 (js/bgm.js) */
 .beat-pattern-btn.active {
-  color: var(--phosphor);
-  border-color: var(--phosphor);
-  background: rgba(57, 255, 20, 0.06);
+  color: var(--d-on);
+  border-color: var(--d-on-border);
 }
 /* 클릭·터치 이펙트 (js/touch-fx.js) — 화면 위, 입력을 가로채지 않음 */
 .touch-fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10000; overflow: hidden; }
@@ -486,46 +634,85 @@ body::after {
 /* 비트 탭 템포 고정 (스테이지 중 — BPM·곡·재생/정지를 바꿀 수 없음, 음색은 그대로) */
 #drawerBeat.tempo-locked #bgmBeats,
 #drawerBeat.tempo-locked #bgmSongs,
-#drawerBeat.tempo-locked .threshold-row,
+#drawerBeat.tempo-locked .bpm-step,
 #drawerBeat.tempo-locked .beat-controls { opacity: 0.35; pointer-events: none; }
 
-/* 잠긴 항목 (비트 — 필드 보상으로 획득) */
+/* 비트 탭 전체 잠김 (처음 — 메인 BGM의 첫 파트를 얻기 전: 조작 · 비트 · 곡 모두) */
+#drawerBeat.beat-locked .drawer-scroll-content > * { opacity: 0.35; pointer-events: none; }
+
+/* 세션 중 잠김 (비트 · 녹음 탭 — js/main.js): 보이기는 하되 눌리지 않는다 */
+.drawer-page.session-locked > * { opacity: 0.35; pointer-events: none; }
+
+/* 잠긴 항목 (비트 · 곡 — 필드 · 세션 보상으로 획득) */
 .beat-pattern-btn.locked { opacity: 0.4; border-style: dashed; cursor: default; }
 .beat-pattern-btn.locked:hover { color: var(--text-dim); border-color: var(--text-dim); }
 
-/* 볼륨 믹서 (설정 탭) */
-.mixer-rows { display: flex; flex-direction: column; gap: 10px; }
-.mixer-presets { margin-bottom: 12px; }
-.mixer-row { display: flex; flex-direction: column; gap: 2px; font-size: calc(var(--ui-unit) * 0.85); color: var(--text); }
-.mixer-head { display: flex; align-items: center; gap: 8px; }
+/* 사운드 밸런스 · 볼륨 믹서 (설정 탭) */
+.mixer-rows { display: flex; flex-direction: column; gap: var(--d-gap); }
+.mixer-presets { margin-bottom: var(--d-gap); }
+.mixer-row { display: flex; flex-direction: column; gap: 2px; font-size: var(--d-font-sub); color: var(--text); }
+.mixer-head { display: flex; align-items: center; gap: var(--d-gap); min-height: var(--d-btn-h); }
+.panel input[type=range] { accent-color: var(--phosphor); }   /* 드로어의 슬라이더 모양은 하나 */
 .mixer-head label { flex: 1; color: var(--text-dim); }
 .mixer-row input[type=range] { width: 100%; margin: 0; accent-color: var(--phosphor); }
-.mixer-val { width: 2.5em; text-align: right; color: var(--phosphor); }
-.mixer-mute { font-family: inherit; font-size: calc(var(--ui-unit) * 0.75); width: 3.2em; padding: 3px 0; color: var(--phosphor);
-  background: transparent; border: 1px solid var(--phosphor); border-radius: 2px; cursor: pointer; touch-action: manipulation; }
-.mixer-row.muted .mixer-val, .mixer-row.muted .mixer-mute { color: var(--text-dim); border-color: var(--text-dim); }
+/* 수치 = 켬·끔 버튼 (믹서): 켜짐 = 켜짐의 톤, 꺼짐 = 흐리게. 누르면 바뀐다 */
+.mixer-num { min-width: 3.2em; height: var(--d-btn-h); padding: 0; background: none; cursor: pointer; touch-action: manipulation; flex-shrink: 0;
+  font: inherit; font-variant-numeric: tabular-nums; text-align: center;
+  color: var(--d-on); border: var(--d-border) solid var(--d-on-border); border-radius: var(--d-radius); }
+.mixer-row.muted .mixer-num { color: var(--text-dim); border-color: var(--text-dim); opacity: 0.6; }
+/* 세부 채널 = 세로 슬라이더를 나란히 (위가 100, 아래가 0): 짧은 이름 / 슬라이더 / 수치. 마스터(가로 한 줄)와 모양으로 갈린다 */
+.mixer-chs { display: flex; gap: var(--d-gap); width: 100%; }
+.mixer-row.mixer-ch { flex: 1; min-width: 0; align-items: center; gap: 2px; }
+.mixer-ch .mixer-num { width: 100%; min-width: 0; }
+.mixer-ch label { font-size: var(--d-font-sub); color: var(--text-dim); white-space: nowrap; line-height: 1.6; }
+.vslider { position: relative; width: 100%; height: var(--d-vslider-h); }
+.mixer-row .vslider input[type=range] { position: absolute; left: 50%; top: 50%; width: var(--d-vslider-h); height: 20px; margin: 0;
+  transform: translate(-50%, -50%) rotate(-90deg); }   /* 가로 슬라이더를 눕힘 — 왼쪽(0)이 아래로 */
 .mixer-row.muted input[type=range] { opacity: 0.4; }
 
-/* 판정 창 (설정 탭) — 믹서 행 모양 재사용 */
-.config-section { margin-top: 22px; }
-.judge-sub { color: var(--text-dim); font-size: calc(var(--ui-unit) * 0.75); }
-.mixer-val.judge-val { width: auto; min-width: 4.2em; }
-.judge-note { margin-top: 8px; font-size: calc(var(--ui-unit) * 0.75); line-height: 1.5; color: var(--text-dim); }
-.judge-note .warn { color: #ff9500; }
+/* 판정 창 (설정 탭) — 범위 그림 (보여 주기만): 왼쪽 끝 = 정박, 오른쪽 끝 = 한계, 세 띠가 정박에서 뻗는다 (안쪽일수록 높다) · 점선 = 칸 경계 */
+.config-section { margin-top: calc(var(--d-group-gap) - var(--d-gap)); }
+.judge-bound { position: relative; height: var(--d-bound-h); overflow: hidden; pointer-events: none;
+  border: var(--d-border) solid var(--text-dim); border-left: 2px solid var(--text); border-radius: var(--d-radius); }
+.jb-band { position: absolute; bottom: 0; left: 0; box-sizing: border-box;
+  background: color-mix(in srgb, var(--c) 22%, #0a0a0f); border: solid var(--c); border-width: 2px 2px 0 0; }
+.jb-band.jb-barely { --c: var(--j-barely); height: 30%; }
+.jb-band.jb-good { --c: var(--j-good); height: 54%; }
+.jb-band.jb-ace { --c: var(--j-ace); height: 78%; }
+.jb-slot { position: absolute; top: 0; bottom: 0; left: 0; box-sizing: border-box; border-right: var(--d-border) dashed var(--text); opacity: 0.55; }
+.jb-slot span { position: absolute; top: 1px; left: 100%; margin-left: 3px; font-size: var(--d-font-sub); line-height: 1; white-space: nowrap; }
+/* 손잡이: 등급마다 버튼 하나 (삼등분) + 그 아래 수치. 버튼을 누른 채 좌우로 밀면 그 등급의 경계가 움직인다 (버튼 밖으로 나가도 이어짐) */
+.judge-grips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--d-gap); margin-top: var(--d-gap); }
+.jb-col { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: center; }
+.jb-col.jb-ace { --c: var(--j-ace); } .jb-col.jb-good { --c: var(--j-good); } .jb-col.jb-barely { --c: var(--j-barely); }
+.jb-grip.ctrl-btn { color: var(--c); border-color: color-mix(in srgb, var(--c) 55%, #0a0a0f); cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; }
+.jb-col.on .jb-grip.ctrl-btn { background: color-mix(in srgb, var(--c) var(--d-ask-fill), #0a0a0f); color: var(--text); }
+.jb-num { font-size: var(--d-font-value); color: var(--c); font-variant-numeric: tabular-nums; line-height: 1.4; }
+.judge-note { font-size: var(--d-font-sub); line-height: 1.5; color: var(--text-dim); }
 
 /* 비트 탭 재생기 (비트·BGM·음색 → BPM → 재생) */
-.bgm-group { margin-bottom: 10px; }
-.bgm-title { font-size: calc(var(--ui-unit) * 0.85); color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px; }
+.bgm-title { font-size: var(--d-font-sub); color: var(--text-dim); letter-spacing: 1px; margin-top: calc(var(--d-group-gap) - var(--d-gap)); }
+.drawer-scroll-content > .bgm-title:first-child { margin-top: 0; }
 
-.beat-controls {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
+/* 버튼 줄 (.beat-controls) — 위 버튼 묶음과 같은 격자 (하나뿐이면 줄 전체, 둘이면 반씩) */
+
+/* 값 넘기기 줄: [<| 지금 값 |>] — 한 덩어리 (칸 사이 틈 없음). 양옆 버튼은 고정 폭, 가운데가 남는 폭 (js/ui.js stepper · BPM 줄 공용) */
+.stepper {
+  display: grid; grid-template-columns: var(--d-step-w) minmax(0, 1fr) var(--d-step-w); gap: 0;
+  align-items: center; width: 100%;
 }
-.fullscreen-controls { margin-top: 0; margin-bottom: 16px; }
-.fullscreen-controls .ctrl-btn { flex: 1; }
-.session-hud-controls { margin-top: 0; margin-bottom: 16px; }
-.session-hud-controls .ctrl-btn { flex: 1; }
+.step-btn { padding: 0; letter-spacing: 0; }
+.step-btn:first-child { border-radius: var(--d-radius) 0 0 var(--d-radius); }
+.step-btn:not(:first-child) { border-radius: 0 var(--d-radius) var(--d-radius) 0; }
+.stepper-value {
+  height: var(--d-btn-h); min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--d-gap);
+  font-size: var(--d-font); color: var(--phosphor); letter-spacing: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-top: var(--d-border) solid var(--text-dim); border-bottom: var(--d-border) solid var(--text-dim);
+}
+.stepper-value span { font-size: var(--d-font-value); font-variant-numeric: tabular-nums; }   /* 강조 값 (BPM 숫자) */
+.stepper-value small { font-size: var(--d-font-sub); color: var(--text-dim); letter-spacing: 1px; }
+.ctrl-btn:disabled { opacity: 0.35; cursor: default; }
 .enc-hud.hud-disabled { display: none; }
 .session-status {
   position: absolute; inset: 0; z-index: 2;
@@ -546,6 +733,7 @@ body::after {
   animation: completion-crown-pulse 5s ease-in-out infinite;
   transition: transform 0.45s ease;
 }
+.completion-crown { pointer-events: auto; cursor: pointer; }   /* 누르면 왕관 치장 (js/field-actors.js — 'tap', actor 'crown') */
 .completion-crown.crown-left { left: calc(var(--canvas-h) * 0.0333); }
 .completion-crown.crown-right { right: calc(var(--canvas-h) * 0.0333); }
 @keyframes completion-crown-pulse {
@@ -553,11 +741,13 @@ body::after {
   50% { transform: scale(1.05); }
 }
 .session-lives, .session-steps {
-  position: absolute; top: 95.9375%; transform: translateY(-50%);
+  position: absolute; top: var(--bar-mid); transform: translateY(-50%);   /* 루프 막대의 줄들의 한가운데 — rhythm/session.js가 막대의 배치(rhythm/guide.js)에서 읽어 넣는다 */
   display: flex; align-items: center; gap: calc(var(--canvas-h) * 0.0083);
 }
-.session-lives { right: calc(var(--canvas-h) * 0.0333); }
-.session-steps { left: calc(var(--canvas-h) * 0.0333); }
+.session-lives { left: calc(var(--canvas-h) * 0.0333); }    /* 기회 하트 = 왼쪽 (관습 — 예전에는 오른쪽) */
+.session-steps { right: calc(var(--canvas-h) * 0.0333); }   /* 단계 체크 = 오른쪽 */
+.session-lives:not(.top), .session-steps:not(.top) { display: none; }   /* 아래쪽 것은 숨긴다 — 위쪽 것만 (화면 아래 구석의 조작 버튼에 가려지지 않는 쪽) */
+.session-lives.top, .session-steps.top { top: calc(100% - var(--bar-mid)); }   /* 위쪽의 같은 것: 아래 것과 위아래 대칭 (아래 가장자리에서의 거리 = 위 가장자리에서의 거리) */
 .session-heart, .session-step {
   display: inline-flex; align-items: center; justify-content: center;
   width: calc(var(--canvas-h) * 0.05); height: calc(var(--canvas-h) * 0.05);
@@ -575,8 +765,8 @@ body::after {
 .session-step.pending { color: rgba(166,255,130,0.28); }
 .session-step.done { color: #a6ff82; text-shadow: 0 0 5px rgba(166,255,130,0.65); }
 .beat-play.playing {
-  color: var(--phosphor) !important;
-  border-color: var(--phosphor) !important;
+  color: var(--d-on) !important;
+  border-color: var(--d-on-border) !important;
 }
 
 /* === 녹음 슬롯 (recorder 이식) === */
@@ -584,14 +774,6 @@ body::after {
   background: var(--ground-lighter); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
   padding: 12px; margin-bottom: 12px;
 }
-.slot-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px; flex-shrink: 0;
-}
-.slot-name { font-weight: bold; font-size: 1.1em; }
-.slot-name .role { color: var(--text-dim); font-weight: normal; font-size: 0.85em; margin-left: 6px; }
-.slot-meta { color: var(--text-dim); font-size: 0.8em; }
-
 .slot-wave { flex-shrink: 0; }
 .waveform-wrap {
   position: relative; width: 100%; height: 80px;
@@ -599,36 +781,43 @@ body::after {
 }
 .waveform-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-.slot-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.slot-controls button {
-  padding: 6px 0; border: none; border-radius: 4px; cursor: pointer;
-  font-size: 0.85em; color: #fff; width: 80px; text-align: center;
-  touch-action: manipulation;
-}
-.btn-listen { background: #2d6a4f; }
-.btn-listen:hover { background: #40916c; }
-.btn-record { background: #c0392b; }
-.btn-record:hover { background: #e74c3c; }
-.btn-record.recording { background: #e74c3c; animation: pulse 0.8s infinite alternate; }
-.btn-play { background: #2980b9; }
-.btn-play:hover { background: #3498db; }
-.btn-play:disabled { background: #444; cursor: default; }
-.btn-adopt { background: #8e44ad; }
-.btn-adopt:hover { background: #9b59b6; }
-.btn-adopt:disabled { background: #444; cursor: default; }
-.btn-adopt.adopted { background: #27ae60; }
+/* 녹음 탭 버튼 = 드로어 버튼 그대로 (.ctrl-btn — js/recorder/ui.js). 2열: [샘플][루프] / [녹음하기 — 줄 전체] / [채택][다시] */
+.slot-controls { --cols: 2; --cell-min: 0px; }   /* 늘 반씩 — 칸의 최소 폭을 두지 않음 */
+/* 가운데 버튼 (녹음하기 · 들어보기) — 이 탭의 주인공: 줄 전체 · 큰 높이. 채택 · 다시는 반 칸 (덜 눌리게) */
+.slot-main { grid-column: 1 / -1; height: var(--d-btn-h-main); color: var(--d-on); border-color: var(--d-on-border); }
+.btn-record.recording { color: var(--coral); border-color: var(--coral); animation: pulse 0.8s infinite alternate; }
+/* 묻는 중 (채택 · 갱신 · 다시 · 제거할까요?) — 가운데는 모양 그대로 질문만 보여 줌 (누를 수 없음). 아래 둘 = 예(파랑) / 아니오(빨강)
+   누르거나 올리면 안쪽을 그 색으로 채움 */
+.slot-main.asking { pointer-events: none; }
+.ctrl-btn.ask-yes { color: var(--blue); border-color: var(--blue); }
+.ctrl-btn.ask-no { color: var(--coral); border-color: var(--coral); }
+.ctrl-btn.ask-yes:hover, .ctrl-btn.ask-yes:active { color: #fff; background: color-mix(in srgb, var(--blue) var(--d-ask-fill), var(--ground)); border-color: var(--blue); }
+.ctrl-btn.ask-no:hover, .ctrl-btn.ask-no:active { color: #fff; background: color-mix(in srgb, var(--coral) var(--d-ask-fill), var(--ground)); border-color: var(--coral); }
+.btn-adopt.adopted { color: var(--d-on); border-color: var(--d-on-border); pointer-events: none; }   /* 완료 = 표시 (누르는 버튼이 아님) */
 
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.6; } }
 
-.slot-status { color: var(--text-dim); font-size: 0.8em; margin-left: 8px; }
+.slot-status { grid-column: 1 / -1; color: var(--text-dim); font-size: var(--d-font-sub); line-height: 1.5; }
+.slot-status:empty { display: none; }
 
 .slot-sliders { width: 100%; }
 .xf-row {
-  display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8em; color: var(--text-dim);
+  display: flex; align-items: center; gap: var(--d-gap); min-height: var(--d-btn-h); font-size: var(--d-font-sub); color: var(--text-dim);
 }
-.xf-row input[type="range"] { flex: 1; min-width: 60px; }
+.xf-row span { white-space: nowrap; flex-shrink: 0; }
+.xf-row input[type="range"] { flex: 1; min-width: 0; }
 
-.loop-info { color: #4caf50; font-size: 0.8em; margin-top: 4px; flex-shrink: 0; }
+/* 루프 분석 값 (개발 공간에서만 — js/recorder/ui.js setLoopDevInfo). 평소엔 비어 있어 줄이 없다 */
+.loop-info { color: var(--text-dim); font-size: var(--d-font-sub); line-height: 1.5; flex-shrink: 0; }
+.loop-info:empty { display: none; }
+/* 루프 선의 이름표 (시작 · 끝) — 파형 위, 선 바로 오른쪽 (js/recorder/ui.js setLoopLabels). 선과 같은 색 */
+.wave-lab {
+  position: absolute; display: none; pointer-events: none;
+  font-size: var(--d-font-sub); line-height: 1; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+/* 둘 다 루프 구간 안쪽: 시작 = 선의 오른쪽 · 위 / 끝 = 선의 왼쪽 · 아래 */
+.wave-lab.lab-start { top: 2px; padding-left: 3px; color: #4caf50; }
+.wave-lab.lab-end { bottom: 2px; padding-right: 3px; color: #f44336; }
 
 .count-bar-wrap {
   position: relative; width: 100%; height: 20px;
@@ -636,27 +825,11 @@ body::after {
 }
 .count-bar-wrap canvas { width: 100%; height: 100%; }
 
-.tab-bar {
-  display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid rgba(255,255,255,0.12);
-  flex-shrink: 0;
-}
-.tab-btn {
-  padding: 8px 0; border: none; background: transparent; color: var(--text-dim);
-  font-size: 0.85em; cursor: pointer; border-bottom: 2px solid transparent;
-  margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
-  width: 70px; text-align: center;
-  touch-action: manipulation;
-}
-.tab-btn:hover { color: var(--text); }
-.tab-btn.active { color: #fff; border-bottom-color: #e67e22; }
-.tab-btn .badge {
-  display: inline-block; margin-left: 4px;
-  border-radius: 8px; font-size: 0.7em; background: #444; color: #aaa;
-  width: 28px; height: 16px; line-height: 16px;
-  text-align: center; vertical-align: middle; overflow: hidden;
-}
-.tab-btn.active .badge { background: #e67e22; color: #fff; }
-.tab-btn .badge.done { background: #27ae60; color: #fff; }
+/* 소리 고르기 (뚜~ · 떽! · 웡~) = 드로어 버튼 묶음 셋 (.beat-patterns · .beat-pattern-btn). 표시: ● 녹음함 · ✓ 채택함 */
+.tab-btn { padding: 0 2px; }   /* 3등분 칸에 이름 + 표시가 들어가게 안쪽 여백을 줄임 */
+.tab-btn .badge { margin-left: 2px; font-size: var(--d-font-sub); color: var(--text-dim); }
+.tab-btn .badge.done { color: var(--phosphor); }
+.tab-btn .badge:empty { display: none; }
 .offset-row { display: flex; }
 
 

@@ -1,5 +1,5 @@
 // 입력 처리: 마우스/터치/키보드 → 원본 에셋 재생
-//   두 방식이 늘 함께 열려 있다 (모드 구분 없음): 단일 = 캔버스·단일 영역·C (짧게 떽 / 길게 뚜우엉), 분리 = 떽·뚜우엉 버튼·Z·X
+//   두 방식이 늘 함께 열려 있다 (모드 구분 없음): 단일 = 캔버스·C (짧게 떽 / 길게 뚜우엉), 분리 = 화면 위의 떽·뚜우엉 버튼(js/pad.js)·Z·X
 //   모아이 입력은 한 번에 하나 — 방식과 주체를 통틀어 먼저 누른 쪽만 받고, 누른 주체의 뗌으로만 풀린다
 //   (뚜~ 루프 핸들이 두 방식 공용 — original.js — 겹치면 앞 루프가 고아가 된다)
 (function() {
@@ -21,7 +21,7 @@
     return (e.type.indexOf('key') === 0 ? 'key' : 'mouse') === owner;
   }
 
-  // === 원본 단일 영역 (press/release → 떽/뚜우엉 분기) ===
+  // === 단일 입력 (press/release → 떽/뚜우엉 분기) ===
   var origDown = false;
   var origOwner = null;
   // 대리조작(AUTO) 중에는 수동 누름 무시 (원본 N모드 동일) — 원샷/루프 핸들 충돌 방지
@@ -33,14 +33,12 @@
     if (origDown || origHoldDown || autoplayLocked()) return;   // 한 번에 하나 (분리 뚜우엉 중이면 무시)
     origDown = true;
     origOwner = pressOwner(e);
-    M.el.playOriginal.classList.add('active');
     M.originalOnPress();
   }
   function onOrigUp(e) {
     if (!origDown || !isOwnerUp(e, origOwner)) return;
     e.preventDefault();
     origDown = false;
-    M.el.playOriginal.classList.remove('active');
     emitRelease(e, origOwner);   // 뗀 위치 먼저 — 이어지는 소리 알림(떽/엉)과 한 쌍 (field-actors.js)
     M.originalOnRelease();
   }
@@ -96,7 +94,6 @@
     if (!origDown && !origHoldDown) return;
     origDown = false;
     origHoldDown = false;
-    M.el.playOriginal.classList.remove('active');
     M.el.playOrigHold.classList.remove('active');
     M.forceCleanup();
     if (M.body) M.body.act('idle');               // 지금 몸 (빙의 — js/possess.js)
@@ -110,7 +107,6 @@
   function releaseAsLifted() {
     if (origDown) {
       origDown = false;
-      M.el.playOriginal.classList.remove('active');
       M.originalOnRelease();
     }
     if (origHoldDown) {
@@ -127,23 +123,18 @@
       if (document.hidden) releaseAllSilently();
     });
 
-    // === 단일 영역 ===
-    var origBtn = M.el.playOriginal;
-    if (origBtn) {
-      origBtn.addEventListener('mousedown', onOrigDown);
-      window.addEventListener('mouseup', function(e) {
-        if (origDown) onOrigUp(e);
-      });
-      origBtn.addEventListener('touchstart', onOrigDown, { passive: false });
-      window.addEventListener('touchend', function(e) {
-        if (origDown) onOrigUp(e);
-      });
-      window.addEventListener('touchcancel', function(e) {
-        if (origDown) onOrigUp(e);
-      });
-    }
+    // === 단일 입력 (캔버스 · 키 C): 뗌은 어디서 떼든 받는다 (누른 자리 밖에서 떼도) ===
+    window.addEventListener('mouseup', function(e) {
+      if (origDown) onOrigUp(e);
+    });
+    window.addEventListener('touchend', function(e) {
+      if (origDown) onOrigUp(e);
+    });
+    window.addEventListener('touchcancel', function(e) {
+      if (origDown) onOrigUp(e);
+    });
 
-    // === 캔버스: 단일 영역과 동일 (release는 위 window 리스너가 처리 — 뗀 위치 알림 포함) ===
+    // === 캔버스 = 단일 입력의 누르는 자리 (release는 위 window 리스너가 처리 — 뗀 위치 알림 포함) ===
     var canvasBox = M.el.spriteBox;
     if (canvasBox) {
       var onCanvasDown = function(e) { onOrigDown(e); };

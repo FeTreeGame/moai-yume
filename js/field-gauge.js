@@ -89,6 +89,7 @@
   }
   function play(target, fx) { if (target && target.animate) target.animate(fx.frames, { duration: fx.ms, easing: 'ease-out' }); }
   // 홀드 미션 문구: 홀드를 기다리는 동안(홀드 단계 · 미션 받는 중 · 쉼 아님) — 누르는 중이면 KEEP HOLDING!, 아니면 HOLD NOW!
+  let finalShown = false;           // 'TAP MINI MOAI!'가 한 번이라도 떴는가 (그 뒤로는 문구가 바뀌거나 숨어도 그대로 — 한 번 열리면 열린 채)
   function renderCue() {
     if (!cue) return;
     const progress = M.fieldProgress;
@@ -96,7 +97,7 @@
     const level = state && progress.levels ? progress.levels[state.level] : null;
     const allClear = !!(M.fieldActors && ((M.fieldActors.complete && M.fieldActors.complete()) || (M.fieldActors.completionPreview && M.fieldActors.completionPreview())));
     if (allClear) {
-      cue.classList.remove('hidden');
+      cue.classList.toggle('hidden', !!M.sessionActive);   // 세션 중에는 숨긴다 (바로 — 페이드 없이)
       cue.textContent = 'GAME ALL CLEAR!';
       return;
     }
@@ -106,6 +107,7 @@
     if (!on) return;
     if (lock && restAfterMission) { cue.textContent = 'GOOD JOB!'; return; }
     const finalHold = !!(level && level.condition && level.condition.card === 'hold' && level.reward === 'none' && level.repeat === 'untilEmpty');
+    if (finalHold && !rhythmMission && !finalShown) { finalShown = true; document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'open', actor: 'minis' } })); }   // 마지막 단계의 문구(TAP MINI MOAI!)가 처음 뜬 순간 — 미니 모아이와의 상호작용이 여기서 열린다 (js/field-actors.js)
     cue.textContent = rhythmMission
       ? 'MATCH RHYTHM!'
       : finalHold
@@ -202,13 +204,14 @@
 
   M.fieldGauge = {
     add: add,
-    state: function() { const k = restKind(); return { phase: phase, value: value, count: count, rest: k, restEnd: k ? lock.until : null }; },
+    state: function() { const k = restKind(); return { phase: phase, value: value, count: count, rest: k, restEnd: k ? lock.until : null, holding: holding }; },   // holding = 지금 누르는 뚜~가 채우는 중 (홀드 미션에서만)
     restUntil: restUntil,            // 쉼의 끝 시각 걸기 (진행 표 — 다 찬 순간, 오디오 시계)
     clock: clock, loopSec: loopSec,  // 쉼 시계 · 필드 템포 1루프 초 (진행 표가 끝 시각을 셀 때)
     view: view,                      // 보이기 상태 (하단 루프 막대가 따름)
     setNeed: function(which, n) { if ((which === 'appear' || which === 'fill') && (n > 0 || (n && typeof n === 'object'))) GAUGE[which] = n; },   // 단계의 필요량 (진행 표 — js/field-progress.js): 초 | { loops } | { beats }
     setSource: function(src) { GAUGE.source = src || 'hold'; if (GAUGE.source !== 'hold') holding = false; renderCue(); },   // 입력원 (진행 표 조건 카드)
     needSec: function(which) { return needSec(GAUGE[which || (phase === 'appear' ? 'appear' : 'fill')]); },   // 지금(또는 그 단계) 필요량을 초로
+    finalShown: function() { return finalShown; },   // 마지막 단계의 문구가 떴는가 (미니 모아이를 누를 수 있게 되는 때)
     policy: GAUGE, fx: FX, cue: CUE, // 조정·시험용 (값을 바꾸면 다음 채움부터)
   };
   render();

@@ -48,10 +48,12 @@ function layout(len) {
   var rowH = 22, gap = 6, bottom = G.H - 14;
   var rows = Math.max(1, Math.ceil(len / ROW));
   var top0 = bottom - rows * rowH - (rows - 1) * gap;
-  return { bgX: bgX, bgW: bgW, slotW: bgW / (LEAD + ROW), rowH: rowH, gap: gap, rows: rows, lead: LEAD, row: ROW,
+  var slotW = bgW / (LEAD + ROW);
+  // noteR = 음표 원의 반지름 — 이 배치 위에 음표 원을 그릴 때 (rhythm/reveal.js · rhythm/approach.js): 이웃과 겹치지 않는 가장 큰 원
+  return { bgX: bgX, bgW: bgW, slotW: slotW, rowH: rowH, gap: gap, rows: rows, lead: LEAD, row: ROW, noteR: Math.min(slotW, rowH + gap) / 2,
     rowY: function(r) { return top0 + r * (rowH + gap); } };
 }
-G.guideLayout = layout;
+G.guideLayout = layout;                       // 막대의 배치. 가이드 비주얼(rhythm/guide.js)이 로드되면 '지금 모양의 배치'로 바뀌고, 이것은 G.barLayout으로 남는다
 G.guideNoteColor = npcColor;
 
 G.renderGuideBars = function(ctx) {

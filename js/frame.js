@@ -13,7 +13,7 @@
     var dt = last === null ? 0 : Math.min(0.05, t - last);
     last = t;
     tasks.slice().forEach(function(fn) { if (fn(t, dt) === false) remove(fn); });
-    if (M.spriteRedraw) M.spriteRedraw();
+    if (M.spriteFlush) M.spriteFlush(); else if (M.spriteRedraw) M.spriteRedraw();   // 프레임당 한 번 그린다 (작업들이 도중에 낸 '다시 그려 달라'는 요청은 표시만 되어 있다 — js/sprite.js)
     if (tasks.length) raf = requestAnimationFrame(tick);
     else { raf = null; last = null; }
   }

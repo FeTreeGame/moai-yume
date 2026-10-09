@@ -12,33 +12,48 @@
 var G = window.G;
 
 // ── 유닛 타입: 판정 윈도우 크기 (난이도) ──
-// ace/good/barely: 각 등급의 윈도우 크기 (초)
+// ace/good/barely: 각 등급의 윈도우 크기 — 상대치 (창 전체 폭 ÷ 칸, UNIT_MODE). 템포가 달라도 같은 프리셋 = 같은 비율
+//   NORMAL = 기본 (GOOD 100% = 구멍이 칸에 꽉 참), EASY = 그 1.5배, HARD = 절반
 // HIT = ace + good (전 레벨 공통), BARELY 이하 = MISS
 // index: 레벨 = 프리셋일 뿐 — 판정 창은 명시적 설정(judgeCfg)이 기준 (설정 탭 js/judge-config.js)
+var UNIT_MODE = 'rel';
 var UNIT_TYPES = {
-  easy:   { label: 'EASY',   ace: 0.050, good: 0.120, barely: 0.160 },
-  normal: { label: 'NORMAL', ace: 0.030, good: 0.080, barely: 0.120 },
-  hard:   { label: 'HARD',   ace: 0.015, good: 0.040, barely: 0.070 }
+  easy:   { label: 'EASY',   ace: 0.75, good: 1.50, barely: 2.25 },
+  normal: { label: 'NORMAL', ace: 0.50, good: 1.00, barely: 1.50 },
+  hard:   { label: 'HARD',   ace: 0.25, good: 0.50, barely: 0.75 }
 };
+var DEFAULT_TYPE = 'normal';                    // 처음 상태 · 기본값 버튼이 돌아가는 곳
 var HIT_GRADES = { ace: true, good: true }; // 고정: ace+good = HIT
 
 // ── index: 판정 창 설정 ──
 // mode 'abs' = 절대치: 값 = 반폭 (초), BPM과 무관
 // mode 'rel' = 상대치: 값 = 창 전체 폭 ÷ 칸 (1 = 칸에 꽉 참, 1 초과 허용) — 칸 길이(16분음표)는 현재 BPM
-// preset = 값이 프리셋 그대로면 그 이름, 값을 직접 바꾸면 null
-// 기본 = 상대치 50 / 100 / 150 % (GOOD 100% = 구멍이 칸에 꽉 참 — 100 BPM ±37.5 / 75 / 112.5 ms)
-var JUDGE_DEFAULT = { mode: 'rel', preset: null, ace: 0.5, good: 1.0, barely: 1.5 };
+// preset = 고른 것: 프리셋 이름(UNIT_TYPES), 값을 직접 바꾸면 null (= CUSTOM)
+// 기본 = 프리셋 DEFAULT_TYPE (NORMAL: 상대치 50 / 100 / 150 % — 100 BPM ±37.5 / 75 / 112.5 ms)
+var JUDGE_DEFAULT = { mode: UNIT_MODE, preset: DEFAULT_TYPE, ace: UNIT_TYPES[DEFAULT_TYPE].ace, good: UNIT_TYPES[DEFAULT_TYPE].good, barely: UNIT_TYPES[DEFAULT_TYPE].barely };
+function typeOf(name) { return name === 'default' ? DEFAULT_TYPE : name; }   // 'default' = 예전 이름 (저장값 · 호출) → 기본 프리셋
 var judgeCfg = Object.assign({}, JUDGE_DEFAULT);
+var judgeCustom = null;                         // 직접 바꾼 값의 보관 칸 { mode, ace, good, barely } — 한 번도 바꾸지 않았으면 null (고를 것에 CUSTOM이 없음)
 var jw = null;                                  // 현재 판정 창 (초, 반폭) — 매 프레임 판정 시작 때 갱신
 function slotSec() { return G.BEAT_SEC / 4; }
 function cfgToSec(v, mode) { return mode === 'rel' ? v * slotSec() / 2 : v; }
 function secToCfg(sec, mode) { return mode === 'rel' ? sec * 2 / slotSec() : sec; }
+function cfgToCfg(v, from, to) { return from === to ? v : secToCfg(cfgToSec(v, from), to); }   // 단위가 같으면 그대로 (환산 오차 없이)
 // 현재 판정 창 조회 (초, 반폭) — 판정과 가이드 막대(hud.js 구멍·ace 띠·barely 끝선)가 같은 값을 쓴다
 G.getJudgeWindows = function() {
   var m = judgeCfg.mode;
   return { ace: cfgToSec(judgeCfg.ace, m), good: cfgToSec(judgeCfg.good, m), barely: cfgToSec(judgeCfg.barely, m) };
 };
-G.getJudgeConfig = function() { return Object.assign({}, judgeCfg); };
+G.getJudgeConfig = function() { return Object.assign({ custom: judgeCustom ? Object.assign({}, judgeCustom) : null }, judgeCfg); };
+// 고를 수 있는 것 (설정 탭 — 값 넘기기 줄): 프리셋 셋 · (직접 바꾼 값이 있으면) CUSTOM
+G.judgePresets = function() {
+  var list = [];
+  Object.keys(UNIT_TYPES).forEach(function(k) { list.push({ id: k, name: UNIT_TYPES[k].label }); });
+  if (judgeCustom) list.push({ id: 'custom', name: 'CUSTOM' });
+  return list;
+};
+// 지금 고른 것 (id) — 값을 직접 바꾼 상태면 'custom'
+G.judgePreset = function() { return judgeCfg.preset || 'custom'; };
 // 값 하나 바꾸기 (현재 모드 단위) — ace ≤ good ≤ barely 순서는 나머지를 밀어서 지킨다
 G.setJudgeValue = function(key, v) {
   if (['ace', 'good', 'barely'].indexOf(key) < 0) return;
@@ -48,20 +63,28 @@ G.setJudgeValue = function(key, v) {
   if (key === 'good')   { judgeCfg.ace = Math.min(judgeCfg.ace, v); judgeCfg.barely = Math.max(judgeCfg.barely, v); }
   if (key === 'barely') { judgeCfg.good = Math.min(judgeCfg.good, v); judgeCfg.ace = Math.min(judgeCfg.ace, judgeCfg.good); }
   judgeCfg.preset = null;
+  keepCustom();
 };
+// 직접 바꾼 값을 CUSTOM 칸에 보관 (지금 모드 단위와 함께) — 프리셋으로 넘어가도 남아 있어 다시 고를 수 있다
+function keepCustom() { judgeCustom = { mode: judgeCfg.mode, ace: judgeCfg.ace, good: judgeCfg.good, barely: judgeCfg.barely }; }
 // 모드 전환 — 현재 BPM에서 같은 창이 되도록 값을 환산 (전환 순간 판정 불변)
 G.setJudgeMode = function(mode) {
   if ((mode !== 'abs' && mode !== 'rel') || mode === judgeCfg.mode) return;
   ['ace', 'good', 'barely'].forEach(function(k) { judgeCfg[k] = secToCfg(cfgToSec(judgeCfg[k], judgeCfg.mode), mode); });
   judgeCfg.mode = mode;
+  if (!judgeCfg.preset) keepCustom();   // CUSTOM을 쓰는 중이면 보관 값도 새 단위로
 };
 // 저장값 복원 (설정 탭) — 잘못된 값이면 무시
 G.loadJudgeConfig = function(c) {
   if (!c || (c.mode !== 'abs' && c.mode !== 'rel')) return;
   if (!(c.ace >= 0 && c.good >= c.ace && c.barely >= c.good)) return;
-  judgeCfg = { mode: c.mode, preset: UNIT_TYPES[c.preset] ? c.preset : null, ace: c.ace, good: c.good, barely: c.barely };
+  judgeCfg = { mode: c.mode, preset: UNIT_TYPES[typeOf(c.preset)] ? typeOf(c.preset) : null, ace: c.ace, good: c.good, barely: c.barely };
+  var k = c.custom;
+  judgeCustom = (k && (k.mode === 'abs' || k.mode === 'rel') && k.ace >= 0 && k.good >= k.ace && k.barely >= k.good)
+    ? { mode: k.mode, ace: k.ace, good: k.good, barely: k.barely } : null;
+  if (!judgeCfg.preset && !judgeCustom) keepCustom();   // 보관 칸이 없던 때의 저장값 — 직접 바꾼 값이면 그것이 CUSTOM
 };
-G.resetJudgeConfig = function() { judgeCfg = Object.assign({}, JUDGE_DEFAULT); };
+G.resetJudgeConfig = function() { judgeCfg = Object.assign({}, JUDGE_DEFAULT); judgeCustom = null; };
 
 // ── 기대 이벤트 큐 ──
 // {type:'tap'|'hold-start'|'hold-end'|'hold', time:AudioContext시각, tick:절대tick, consumed:bool}
@@ -192,6 +215,9 @@ function gradeAndRecord(ev, inputTime, mark) {
   ev.consumed = true;
   judgeStats[grade]++;
 
+  // 입력 표시에 판정 결과 기록 (hud.js 원 색) + 맞은 음표의 칸 (rhythm/feedback.js — 그 음표가 받은 등급). 아래 통지보다 먼저 (듣는 쪽이 등급을 읽는다)
+  if (mark) { mark.res = grade; mark.tick = ev.tick; }
+
   // 그룹핑: ace+good = HIT, barely = MISS (레벨 불문)
   var isHit = !!HIT_GRADES[grade];
   var group = isHit ? 'hit' : 'miss';
@@ -204,8 +230,6 @@ function gradeAndRecord(ev, inputTime, mark) {
     G.showJudge('MISS', 'miss');
   }
 
-  // 입력 표시에 판정 결과 기록 (hud.js 원 색)
-  if (mark) mark.res = grade;
 }
 
 // ── 매 프레임 판정 처리 (관찰형) ──
@@ -343,17 +367,26 @@ G.resetJudgeStats = function() {
 };
 
 // 유닛 타입 변경 — index: 프리셋 적용 (값을 현재 모드 단위로 환산해 채운다)
+//   'custom' = 보관해 둔 직접 바꾼 값 (없으면 무시 — 그 값의 단위에서 지금 모드로)
 G.setUnitType = function(name) {
+  if (name === 'custom') {
+    if (!judgeCustom) return null;
+    ['ace', 'good', 'barely'].forEach(function(k) { judgeCfg[k] = cfgToCfg(judgeCustom[k], judgeCustom.mode, judgeCfg.mode); });
+    judgeCfg.preset = null;
+    return 'CUSTOM';
+  }
+  name = typeOf(name);
   var p = UNIT_TYPES[name];
   if (!p) return null;
-  ['ace', 'good', 'barely'].forEach(function(k) { judgeCfg[k] = secToCfg(p[k], judgeCfg.mode); });
+  ['ace', 'good', 'barely'].forEach(function(k) { judgeCfg[k] = cfgToCfg(p[k], UNIT_MODE, judgeCfg.mode); });
   judgeCfg.preset = name;
   return p.label;
 };
 
 // index: 표시 이름 — 프리셋 그대로면 그 이름, 직접 바꾼 값이면 CUSTOM (상대치면 %)
 G.getUnitType = function() {
-  return (judgeCfg.preset ? UNIT_TYPES[judgeCfg.preset].label : 'CUSTOM') + (judgeCfg.mode === 'rel' ? ' %' : '');
+  var p = judgeCfg.preset;
+  return (p ? UNIT_TYPES[p].label : 'CUSTOM') + (judgeCfg.mode === 'rel' ? ' %' : '');
 };
 
 // 매 프레임 판정 처리 (세션 프레임 루프에서 호출)

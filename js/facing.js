@@ -1,6 +1,6 @@
 // 메인 모아이 방향 — 제자리에서 누른 쪽을 바라본다 (좌우 반전 — layout.js M.LAYOUT.moai.flip)
 //   원천 우선순위: 세션 고정 > 터치(포인터) > 방향키
-//     세션 고정: 세션이 시작되면(진입 대기부터) 계열 표 FACING.session의 방향으로 고정 — 세션 동안 포인터·키 무시, 끝나면 풀림
+//     세션 고정: 세션이 시작되면(진입 대기부터) 계열 표 FACING.session의 방향으로 고정 — 세션 동안 포인터·키 무시, 끝나면 풀리되 보던 방향은 그대로 (세션의 방향이 자유 방향으로 넘어간다)
 //     터치(포인터): 누르는 순간과 누른 채 끄는 동안 — 마우스는 클릭·드래그, 터치는 대기·끌기 (마우스를 올려두기만 하면 아무 일 없음 — 이 프로젝트의 규칙). 떼면 마지막 위치 유지
 //     방향키 ←/→: 다음 포인터 입력 전까지만 (포인터가 들어오면 늘 포인터 — 같은 순간이면 포인터가 이김)
 //   기준선 = 메인 모아이 반전 축 (그림 상자 기준 pivot → 캔버스 x). 축 ± FACING.dead 안에서는 지금 방향 유지 (넘나들 때 깜빡임 방지)
@@ -64,12 +64,14 @@
   // 세션 고정
   document.addEventListener('moai:session', function(e) {
     const d = e.detail;
+    if (!d.active && locked) free = locked;   // 세션이 끝남 → 보던 방향을 그대로 (세션 중에 누른 자리로 돌아보지 않는다 — 다음 포인터 · 방향키 입력 때 바뀐다)
     locked = d.active ? (FACING.session[d.family] || null) : null;
     apply();
   });
 
   M.facing = {
     side: side,
+    axis: axisX,                       // 반전 축 (캔버스 폭 비) — 방향이 바뀌어도 움직이지 않는 가로 자리 (카메라의 홀드 줌인이 쓴다)
     lock: function(s) { locked = s || null; apply(); },   // 시험·이후 사건용
     policy: FACING,
   };

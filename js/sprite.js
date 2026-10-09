@@ -14,11 +14,14 @@
   let currentFrame = 'idle';
   let animId = null;        // rAF id
 
-  // 필드 이미지 (4:3, 캔버스 전체): 배경 = 하늘·바다·섬·구멍 / 전경 = 앞쪽 잔디 띠 (layout.js 'ground' 레이어)
+  // 필드 이미지: 배경 = 하늘·바다 (캔버스 폭 전체, 위에서부터 — 땅(scenery 'ground')이 늘 덮는 아래쪽은 그림에 없다) / 전경 = 앞쪽 잔디 띠 (layout.js 'ground' 레이어 — 보이는 띠만)
+  //   그림은 tools/asset-web.py --plain 이 원본(소스 저장소 assets/)에서 굽는다
+  const IMPACT_ANCHOR = { x: 0.37, y: 0.8 };   // 타격 연출의 기준점 (모아이 상자 비 — 목 아래, 땅에 박힌 자리)
   const field = { back: new Image(), front: new Image() };
+  M.spriteImages = { frames: frames, field: field };   // 그림 객체에 닿는 통로: 모아이 프레임은 한 벌 — 미니 모아이(js/field-actors.js)도 이것을 같이 쓴다. 시험 때는 원본과 바꿔 끼워 비교
   field.back.onload = field.front.onload = function() { if (ready) drawFrame(currentFrame); };
-  field.back.src = 'assets/field/back.png';
-  field.front.src = 'assets/field/front.png';
+  field.back.src = 'assets/field/back.webp';
+  field.front.src = 'assets/field/front.webp';
   function loadedImg(img) { return img.complete && img.naturalWidth > 0; }
 
   // 프레임 프리로드
@@ -26,6 +29,8 @@
     FRAME_NAMES.forEach(name => {
       const img = new Image();
       img.onload = () => {
+        const box = window.MoaiData && window.MoaiData.frames && window.MoaiData.frames[name];
+        if (box) img.__box = box;     // 보이는 부분만 남긴 그림 — 원래 상자의 어디였는지 (layout.js M.drawAt이 읽는다)
         frames[name] = img;
         loaded++;
         updateLoadProgress();
@@ -36,7 +41,7 @@
         loaded++;
         if (loaded === FRAME_NAMES.length) { ready = true; if (cb) cb(); }
       };
-      img.src = 'assets/' + name + '.png';
+      img.src = 'assets/' + name + '.webp';
     });
   }
 
@@ -70,7 +75,7 @@
     spriteCtx.save();
     if (cam) cam.apply(spriteCtx, W, H, 'back');
     if (loadedImg(field.back)) {
-      spriteCtx.drawImage(field.back, 0, 0, W, H);
+      spriteCtx.drawImage(field.back, 0, 0, W, W * field.back.naturalHeight / field.back.naturalWidth);   // 폭 전체, 높이는 그림 비율대로 (위쪽만 있는 그림)
     } else if (M.drawSceneTo) {
       M.drawSceneTo(spriteCtx, W, H);
     } else {
@@ -84,10 +89,23 @@
     const layers = (M.friendLayers ? M.friendLayers() : []).concat(M.sceneryLayers ? M.sceneryLayers() : []).concat(M.fieldActors ? M.fieldActors.layers() : []).concat(M.fxLayers ? M.fxLayers() : []);
     if (loadedImg(field.front)) layers.push({ id: 'ground', z: M.LAYOUT.ground.z, draw: function(ctx) { M.drawPlaced(ctx, field.front, 'ground', W, H); } });
     layers.push({ id: 'moai', z: M.LAYOUT.moai.z, draw: function(ctx) {
-      const acc = M.accessories, r = acc ? M.placedRect(M.LAYOUT.moai, M.LAYOUT_ASPECT.moai, W, H, M.moaiDy()) : null;
-      if (acc) acc.draw(ctx, name, r, M.LAYOUT.moai.flip, 'back');    // 악세사리 (js/accessories.js — 모아이와 같은 상자·반전, 지금 프레임의 델타)
+      const acc = M.accessories, L = M.LAYOUT.moai, r = M.placedRect(L, M.LAYOUT_ASPECT.moai, W, H, M.moaiDy());
+      // 타격 연출 (js/impact.js — 맞힌 순간 튀고 밝아진다, 누르는 동안 떨린다): 땅에 박힌 자리(IMPACT_ANCHOR)를 기준으로 — 위로 솟는 모양. 악세사리도 같이
+      const k = M.impact ? M.impact.moai() : null;
+      if (k) {
+        const ax = r.cx + (L.flip ? -1 : 1) * (IMPACT_ANCHOR.x - 0.5) * r.dw, ay = r.cy + (IMPACT_ANCHOR.y - 0.5) * r.dh;
+        ctx.save(); ctx.translate(ax + k.dx * r.dw, ay + k.dy * r.dw); ctx.scale(k.sx, k.sy); ctx.translate(-ax, -ay);
+      }
+      const lag = function(layer) {          // 악세사리는 모아이보다 살짝 늦게 · 더 크게 따라온다 (k.acc — 따라오는 움직임이 무게를 만든다)
+        if (!acc) return;
+        if (k && k.acc !== 1) { const ax2 = r.cx + (L.flip ? -1 : 1) * (IMPACT_ANCHOR.x - 0.5) * r.dw, ay2 = r.cy + (IMPACT_ANCHOR.y - 0.5) * r.dh; ctx.save(); ctx.translate(ax2, ay2); ctx.scale(1, k.acc); ctx.translate(-ax2, -ay2); acc.draw(ctx, name, r, L.flip, layer); ctx.restore(); }
+        else acc.draw(ctx, name, r, L.flip, layer);
+      };
+      lag('back');    // 악세사리 (js/accessories.js — 모아이와 같은 상자·반전, 지금 프레임의 델타)
       M.drawPlaced(ctx, img, 'moai', W, H);
-      if (acc) acc.draw(ctx, name, r, M.LAYOUT.moai.flip, 'front');
+      if (k && k.flash > 0) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha *= k.flash; M.drawPlaced(ctx, img, 'moai', W, H); ctx.restore(); }   // 밝아짐 = 같은 그림을 더해 그린다 (모아이 모양 그대로)
+      lag('front');
+      if (k) ctx.restore();
     } });
     layers.sort(function(a, b) { return a.z - b.z; });
     for (let i = 0; i < layers.length; i++) layers[i].draw(spriteCtx, W, H);
@@ -96,8 +114,8 @@
     if (M.drawLayoutOverlay) M.drawLayoutOverlay(spriteCtx, W, H);
     spriteCtx.restore();                               // 여기까지 월드 층
 
-    // 모아이 높이 조정 표시 (↑/↓ 직후 잠시)
-    if (performance.now() < heightLabelUntil) {
+    // 모아이 높이 조정 표시 (↑/↓ 직후 잠시) — 개발 공간(?dev)에서만: 수치는 맞추는 사람에게나 쓸모가 있다
+    if (M.dev && performance.now() < heightLabelUntil) {
       const dy = M.moaiDy();
       const txt = M.body && M.body.current() !== null
         ? 'MINI ' + M.body.current() + ' ' + Math.round(getHeight() * 100) + '%'   // 빙의한 미니 모아이 (js/possess.js)
@@ -141,7 +159,7 @@
     heightRaf = null;
     heightLast = null;
     announceHeight(false);
-    console.log('[moai] height', getHeight().toFixed(2), M.body && M.body.current() !== null ? 'mini ' + M.body.current() : 'dy ' + M.moaiDy().toFixed(3));
+    if (M.dev) console.log('[moai] height', getHeight().toFixed(2), M.body && M.body.current() !== null ? 'mini ' + M.body.current() : 'dy ' + M.moaiDy().toFixed(3));
     clearTimeout(heightLabelTimer);
     heightLabelTimer = setTimeout(function() { if (ready) drawFrame(currentFrame); }, 2050);   // 표시 지우기
   }
@@ -159,12 +177,34 @@
     if (typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('moai:height', { detail: { moving: moving, dir: heightDir(), height: getHeight() } }));
   }
   M.moaiHeightNow = getHeight;
+  // 높이를 값으로 정하기 (모아이 끌기 — js/moai-touch.js): 키와 같은 길 (지금 몸의 높이 · 목소리 게인 · 다시 그리기). 움직임의 시작 · 끝 알림은 moaiHeightMove
+  M.setMoaiHeight = function(h) {
+    setHeight(Math.min(1, Math.max(0, h)));
+    if (M.updateVoiceGain) M.updateVoiceGain();
+    heightLabelUntil = performance.now() + 2000;
+    if (ready) drawFrame(currentFrame);
+  };
+  M.moaiHeightMove = function(moving) {
+    if (typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('moai:height', { detail: { moving: !!moving, dir: 0, height: getHeight() } }));
+    if (!moving) { clearTimeout(heightLabelTimer); heightLabelTimer = setTimeout(function() { if (ready) drawFrame(currentFrame); }, 2050); }
+  };
   document.addEventListener('keydown', function(e) { heightKey(e, true); });
   document.addEventListener('keyup', function(e) { heightKey(e, false); });
   window.addEventListener('blur', function() { heightKeys.ArrowUp = heightKeys.ArrowDown = false; });
 
-  // 현재 프레임 다시 그리기 (친구 합류 등 외부 변화용)
+  // 다시 그려 달라는 요청 (친구 합류 · 파티클 · 인스턴스의 사건 등) — 바로 그리지 않고 표시만 한다. 그리기는 프레임당 한 번 (M.spriteFlush)
+  //   (예전: 부르는 즉시 통째로 그렸다 — 부르는 곳이 여럿이라 한 프레임에 두 번 ~ 열 번까지 그렸다. 화면에는 마지막 것만 나간다. 소스 저장소 docs/RENDER-COST.md)
+  //   프레임 루프(js/frame.js)가 돌고 있으면 그 루프가 이번 프레임의 끝에 그린다. 돌고 있지 않으면 다음 프레임에 한 번 그리도록 스스로 예약한다
+  let dirty = false, flushRaf = null;
   M.spriteRedraw = function() {
+    dirty = true;
+    if (M.frame && M.frame.running && M.frame.running()) return;      // 루프가 그린다
+    if (flushRaf == null && typeof requestAnimationFrame === 'function') flushRaf = requestAnimationFrame(function() { flushRaf = null; if (dirty) M.spriteFlush(); });
+    else if (typeof requestAnimationFrame !== 'function') M.spriteFlush();
+  };
+  // 지금 그린다 (프레임당 한 번 — 프레임 루프가 작업들을 돌린 뒤에 부른다)
+  M.spriteFlush = function() {
+    dirty = false;
     if (ready) drawFrame(currentFrame);
   };
 

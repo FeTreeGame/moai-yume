@@ -11,7 +11,7 @@
 //     계열 최상위 성공 → 종료. 드로어 패턴 버튼 = 수동 선택 예약 (항상 우선)
 //
 // 구조: 단일 시계(G.conductor)에 채널을 붙인다 — 모든 출력이 같은 tick·같은 시각을 공유
-//   메트로놈 / 판정 등록(응답 단위) / NPC 목소리(역할별 on·off) / 대리조작 AUTO(응답 단위)
+//   판정 등록(응답 단위) / NPC 목소리(역할별 on·off) / 대리조작 AUTO(응답 단위) — 박자는 이어지는 필드 BGM이 맡는다 (메트로놈 채널은 걷어냄)
 //   이벤트 규칙은 eventsAt(tick) 하나 — 판정 등록·목소리·AUTO·기대 노트 수가 모두 이 함수를 쓴다
 //   패턴 전환·종료는 "컨덕터가 그 단위를 아직 예약하지 않았는가"(scheduledUntil)로 판단 — 시간 여유값 없음
 // 명세: docs/index/modes.md · docs/index/stages.md (허브 docs/INDEX-MVP-SPEC.md)
@@ -69,7 +69,20 @@
     });
   }
   // 그 단계의 예약 항목 { id, pattern } — 패턴이 여럿이면 하나 뽑음
+  // ── 만든 세션 (제작 탭 — js/custom-session.js): 계열 CUSTOM_FAMILY, 단계 1 ~ 3개 (켜 둔 슬롯의 수) ──
+  //   데이터의 풀(POOL)과 따로 둔다 — 계열 목록(families: 미니 모아이 · 완수 조건 · 드로어의 줄)에 들어가지 않는다
+  //   단계 수가 계열마다 같다는 가정(STAGE_COUNT)은 이 계열에서만 푼다 (stageCount)
+  var CUSTOM_FAMILY = 'GUGU';
+  var CUSTOM = [];
+  function setCustom(list) {
+    CUSTOM = [];
+    (list || []).forEach(function(v) { var c = cellsOf(v); if (validStage(CUSTOM_FAMILY, c)) CUSTOM.push({ id: CUSTOM_FAMILY + (CUSTOM.length + 1), patterns: [c] }); });
+    return CUSTOM.length;
+  }
+  function stageCount(family) { return family === CUSTOM_FAMILY ? CUSTOM.length : STAGE_COUNT; }
+  function entries() { return CUSTOM.length ? POOL.concat(CUSTOM) : POOL; }
   function poolEntry(id) {
+    var POOL = entries();
     for (var i = 0; i < POOL.length; i++) {
       var e = POOL[i];
       if (e.id === id) return { id: e.id, pattern: e.patterns[Math.floor(Math.random() * e.patterns.length)] };
@@ -77,7 +90,9 @@
     return null;
   }
   // 식별자: 패턴 내용으로 풀 대조 → 해당 단계 { id, pattern } (없으면 null)
+  //   지금 세션의 계열 안에서 먼저 찾는다 — 만든 패턴이 다른 계열의 것과 모양이 같아도 그쪽으로 넘어가지 않게
   function identify(pattern) {
+    var fam = sessionFamily, POOL = entries().slice().sort(function(a, b) { return (familyOf(b.id) === fam ? 1 : 0) - (familyOf(a.id) === fam ? 1 : 0); });
     for (var i = 0; i < POOL.length; i++) {
       for (var k = 0; k < POOL[i].patterns.length; k++) {
         var q = POOL[i].patterns[k], same = q.length === pattern.length;
@@ -92,11 +107,13 @@
 
   var btn = document.getElementById('trialToggle');
   var ppBtn = document.getElementById('pingpongToggle');
+  var exitBtn = document.getElementById('sessionExit');   // 나가기 (세션 중 · 진입 대기 중에만 — 화면 위 조작 버튼의 떽! 위. 조작 버튼을 숨기면 같이 숨는다)
   var patBox = document.getElementById('trialPatterns');
   var hud = document.getElementById('encHud');
   var lives = document.getElementById('sessionLives');
   var status = document.getElementById('sessionStatus');
   var steps = document.getElementById('sessionSteps');
+  var livesTop = document.getElementById('sessionLivesTop'), stepsTop = document.getElementById('sessionStepsTop');   // 위쪽의 같은 것 (아래 것과 같은 내용 — style.css가 위아래 대칭으로 놓는다)
   var renderedSteps = null;
   var renderedChances = null;
 
@@ -141,13 +158,6 @@
   }
 
   // ── 채널 ──
-  var metronome = {
-    onTick: function(tick, time) {
-      if (tick % 4 !== 0) return;
-      if (tick % 16 === 0) V.kick(time); else V.hihat(time);
-    }
-  };
-
   // 판정 사건 공급 (리듬 코어 채널) — 응답 단위만
   var judgeFeed = G.core.judgeFeed(function(tick) { return roleOf(unitOf(tick)) === 'respond'; }, patternAt);
 
@@ -210,8 +220,16 @@
         npcHandles.all.length = 0; npcHandles.doo = null;
         npcAct('idle');
       } }),
+    // 만든 세션의 부르는 쪽 (구구 — 미니 모아이의 몸이 없다): 소리는 합성음 그대로, 음표가 울리는 시각에 콜 알림만 낸다 (몸짓 · 이펙트 — js/fx-rules.js)
+    performer({ id: 'caller',
+      wants: function(role) { return role === 'listen' && sessionFamily === CUSTOM_FAMILY && !npcBody(); },
+      act: { 'tap': function() { npcAct('tap'); }, 'hold-start': function() { npcAct('hold'); }, 'hold-end': function() { npcAct('release'); } } }),
   ];
-  function npcAct(action) { if (sessionFamily && M.fieldActors) M.fieldActors.act(sessionFamily, action); }
+  // 콜의 음표 알림 'moai:call' { type: 'tap' | 'hold' | 'release', where: 'session' | 'field', family } — NPC가 부르는 음표가 울리는 그 시각에 (연출: js/fx-rules.js)
+  function npcAct(action) {
+    if (sessionFamily && M.fieldActors) M.fieldActors.act(sessionFamily, action);
+    if (action !== 'idle' && typeof CustomEvent === 'function' && document.dispatchEvent) document.dispatchEvent(new CustomEvent('moai:call', { detail: { type: action, where: 'session', family: sessionFamily } }));
+  }
   var performFeed = {
     onTick: function(tick, time) {
       var role = roleOf(unitOf(tick)), ev = eventsAt(tick);
@@ -253,6 +271,7 @@
   // 리듬 코어(rhythm/core.js)의 자리를 쓰는 쪽으로서의 세션: 패턴 = 그 단위의 패턴, 단위 집계는 코어 (기대 수 — 발신 단위는 판정 대상이 아님 → 0, 헛침만)
   var coreUser = {
     len: LEN, patternAt: patternAt,
+    judgedAt: function(tick) { return roleOf(unitOf(tick)) === 'respond'; },   // 플레이어가 칠 차례의 칸 (발신 단위는 듣는 차례)
     expect: function(unit) { return roleOf(unit) === 'respond' ? expectedFor(unit) : 0; },
     onClear: function(unit) { onUnitClear(unit); },
   };
@@ -284,7 +303,7 @@
     var m = /^([A-Z]+)(\d+)$/.exec(found.id);
     if (!m) return;
     var family = m[1], stage = +m[2];
-    if (stage >= STAGE_COUNT) {
+    if (stage >= stageCount(family)) {
       // 계열 최상위 성공 → 판정은 이미 끝남(버리는 박 이전). 다음 단위에 빈 패턴 예약 + 그 단위 예약 직전에 종료
       var from = nextSwitchUnit();
       schedule.push({ from: from, entry: END_ENTRY, manual: false });
@@ -394,12 +413,12 @@
   // 핑퐁: 계열의 단계별 클리어 현황 (예: TAP1 ✓  TAP2 ✓  TAP3 -)
   function clearLine(family) {
     var parts = [];
-    for (var s = 1; s <= STAGE_COUNT; s++) parts.push(family + s + (cleared[family + s] ? ' ✓' : ' -'));
+    for (var s = 1; s <= stageCount(family); s++) parts.push(family + s + (cleared[family + s] ? ' ✓' : ' -'));
     return parts.join('  ');
   }
   function highestCleared(family) {
     var h = 0;
-    for (var s = 1; s <= STAGE_COUNT; s++) if (cleared[family + s]) h = s;
+    for (var s = 1; s <= stageCount(family); s++) if (cleared[family + s]) h = s;
     return h;
   }
   function hearts() {
@@ -407,20 +426,26 @@
     for (var i = 0; i < CHANCES; i++) t += i < chances ? '♥' : '♡';
     return t;
   }
+  var renderedMid = null;
   function renderLives() {
     if (!lives) return;
     var visible = M.sessionActive && mode === 'pingpong';
     if (status) status.classList.toggle('hidden', !visible);
     if (!visible) { renderedChances = null; renderedSteps = null; return; }
+    // 높이 = 루프 막대의 줄들의 한가운데 (rhythm/guide.js의 배치를 읽는다 — 막대를 옮기면 같이 움직인다). style.css .session-lives · .session-steps가 --bar-mid를 쓴다
+    if (status && status.style && status.style.setProperty && G.guideLayout) { var L = G.guideLayout(LEN), mid = ((L.rowY(0) + L.rowY(L.rows - 1) + L.rowH) / 2 / G.H * 100).toFixed(4) + '%'; if (renderedMid !== mid) { status.style.setProperty('--bar-mid', mid); renderedMid = mid; } }
     if (renderedChances !== chances) {
-      while (lives.firstChild) lives.removeChild(lives.firstChild);
-      for (var i = 0; i < CHANCES; i++) {
-        var heart = document.createElement('span');
-        heart.className = 'session-heart ' + (i < chances ? 'full' : 'empty');
-        heart.textContent = '♥';
-        heart.setAttribute('aria-hidden', 'true');
-        lives.appendChild(heart);
-      }
+      [lives, livesTop].forEach(function(box) {
+        if (!box) return;
+        while (box.firstChild) box.removeChild(box.firstChild);
+        for (var i = 0; i < CHANCES; i++) {
+          var heart = document.createElement('span');
+          heart.className = 'session-heart ' + (i < chances ? 'full' : 'empty');
+          heart.textContent = '♥';
+          heart.setAttribute('aria-hidden', 'true');
+          box.appendChild(heart);
+        }
+      });
       renderedChances = chances;
     }
     lives.setAttribute('aria-label', '남은 기회: ' + chances);
@@ -431,21 +456,25 @@
     var visible = M.sessionActive && mode === 'pingpong';
     if (!visible) { renderedSteps = null; return; }
     var family = familyOf(selectedId), progress = '';
-    for (var i = 1; i <= STAGE_COUNT; i++) progress += cleared[family + i] ? '1' : '0';
+    var SC = stageCount(family);                  // 그 계열의 단계 수 (만든 세션은 1 ~ 3)
+    for (var i = 1; i <= SC; i++) progress += cleared[family + i] ? '1' : '0';
     var key = family + ':' + progress;
     if (key === renderedSteps) return;
-    while (steps.firstChild) steps.removeChild(steps.firstChild);
     var completed = 0;
-    for (var j = 1; j <= STAGE_COUNT; j++) {
-      var done = !!cleared[family + j];
-      if (done) completed++;
-      var mark = document.createElement('span');
-      mark.className = 'session-step ' + (done ? 'done' : 'pending');
-      mark.textContent = done ? '✓' : '□';
-      mark.setAttribute('aria-hidden', 'true');
-      steps.appendChild(mark);
-    }
-    steps.setAttribute('aria-label', '완료 단계: ' + completed + ' / ' + STAGE_COUNT);
+    for (var c = 1; c <= SC; c++) if (cleared[family + c]) completed++;
+    [steps, stepsTop].forEach(function(box) {
+      if (!box) return;
+      while (box.firstChild) box.removeChild(box.firstChild);
+      for (var j = 1; j <= SC; j++) {
+        var done = !!cleared[family + j];
+        var mark = document.createElement('span');
+        mark.className = 'session-step ' + (done ? 'done' : 'pending');
+        mark.textContent = done ? '✓' : '□';
+        mark.setAttribute('aria-hidden', 'true');
+        box.appendChild(mark);
+      }
+    });
+    steps.setAttribute('aria-label', '완료 단계: ' + completed + ' / ' + SC);
     renderedSteps = key;
   }
   function renderHud(unit) {
@@ -620,7 +649,6 @@
       G.core.attach(coreUser);
       G.noteSfxOut.gain.value = 1;
       C.reset();
-      C.addChannel(metronome);
       C.addChannel(judgeFeed);
       C.addChannel(npcVoice);
       C.addChannel(performFeed);
@@ -674,7 +702,7 @@
       if (mode === 'pingpong') {
         var h = highestCleared(fam);
         hud.textContent = 'PINGPONG  ' + fam + '  ' + (endReason === 'clear' ? 'COMPLETE' : 'OUT') +
-          '\nRESULT  ' + RATINGS[h] + '  (' + h + '/' + STAGE_COUNT + ')' +
+          '\nRESULT  ' + RATINGS[h] + '  (' + h + '/' + stageCount(fam) + ')' +
           '\nCLEAR  ' + clearLine(fam);
       } else {
         var list = Object.keys(counts).map(function(k) { return k + '×' + counts[k]; }).join(' ');
@@ -709,6 +737,7 @@
     var on = M.sessionActive;
     if (btn) btn.textContent = (on && mode === 'loop') ? '■ 루프 테스트 중단 (T)' : '▶ 루프 테스트 (T)';
     if (ppBtn) ppBtn.textContent = (on && mode === 'pingpong') ? '■ 핑퐁 중단 (P)' : '▶ 핑퐁 (P)';
+    if (exitBtn) exitBtn.classList.toggle('hidden', !on);
   }
 
   function bindToggle(el, m) {
@@ -720,6 +749,27 @@
 
   bindToggle(btn, 'loop');
   bindToggle(ppBtn, 'pingpong');
+  // 나가기 버튼: 길게 눌러야 나간다 (EXIT.hold초 — 연주 중에 잘못 눌러 나가는 일이 없게). 누르는 동안 바탕이 차오르고 (style.css .pad-exit), 도중에 떼면 없던 일
+  //   키 Esc는 묻지 않고 바로 (아래)
+  var EXIT = { hold: 1 };   // 초 (처음 2 — 너무 길었다)
+  if (exitBtn) {
+    var exitTimer = null;
+    var exitCancel = function() { if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; } exitBtn.classList.remove('holding'); };
+    var exitDown = function(e) {
+      if (e && e.cancelable) e.preventDefault();
+      if (exitTimer || !M.sessionActive) return;
+      if (exitBtn.style && exitBtn.style.setProperty) exitBtn.style.setProperty('--exit-hold', EXIT.hold + 's');
+      exitBtn.classList.add('holding');
+      exitTimer = setTimeout(function() { exitCancel(); if (M.sessionActive) stop(); }, EXIT.hold * 1000);
+    };
+    exitBtn.addEventListener('mousedown', exitDown);
+    exitBtn.addEventListener('mouseup', exitCancel);
+    exitBtn.addEventListener('mouseleave', exitCancel);
+    exitBtn.addEventListener('touchstart', exitDown, { passive: false });
+    exitBtn.addEventListener('touchend', exitCancel);
+    exitBtn.addEventListener('touchcancel', exitCancel);
+    document.addEventListener('moai:session', function(e) { if (!e.detail || !e.detail.active) exitCancel(); });   // 세션이 끝나면 누르던 것도 푼다
+  }
 
   document.addEventListener('keydown', function(e) {
     if (e.repeat) return;
@@ -730,7 +780,7 @@
 
   // 세션 설정 API (역할별 NPC 목소리 on/off 등)
   M.session = {
-    // 계열 순서 = 조작 탭 스테이지 행 순서 (풀 순서 — 쉬운 것부터). 필드 새싹 순서·색의 원천 (field-actors.js)
+    // 계열 순서 = 스테이지 행 순서 (개발 탭의 스테이지 단계 — 풀 순서 — 쉬운 것부터). 필드 새싹 순서·색의 원천 (field-actors.js)
     families: function() {
       var out = [];
       POOL.forEach(function(e) { var f = familyOf(e.id); if (out.indexOf(f) < 0) out.push(f); });
@@ -739,6 +789,8 @@
     // 계열 진입 (필드 인스턴스 등 — field-events.js): 진입 대기 → 컨티뉴 → 다음 루프 경계에서 그 계열 1단계로 시작.
     //   세션 중이거나 없는 계열이면 false
     enter: enter,
+    // 만든 세션 (제작 탭): 단계들을 넣는다 (세션 중이 아닐 때) → 그 계열(custom.family)로 enter
+    custom: { family: CUSTOM_FAMILY, set: function(list) { return M.sessionActive ? CUSTOM.length : setCustom(list); }, count: function() { return CUSTOM.length; } },
     phase: function() { return phase; },
     isWaiting: function() { return phase === 'wait'; },
     setVoice: function(role, on) { VOICE[role] = !!on; },

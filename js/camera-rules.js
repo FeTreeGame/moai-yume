@@ -60,6 +60,8 @@
   };
 
   let on = false, family = null, shotId = null, lastRole = null, pending = [];
+  let plain = false;                    // 만든 세션 (제작 탭 — 부르는 쪽이 구구): 카메라는 필드의 구도 그대로 — 샷을 걸지 않고 위쪽 띠만 (아래 띠가 구구를 가린다)
+  function isPlain(fam) { return !!(M.session && M.session.custom && fam && fam === M.session.custom.family); }
   const CAMR = function() { return M.camera; };
   function targetOf(name, fam) {
     const mini = CAMR().at.mini(fam);
@@ -104,9 +106,9 @@
     if (!CAMR()) return;
     if (e.detail.active) {
       if (on) return;                      // 대기 → 진행은 같은 세션
-      on = true; family = e.detail.family || null; lastRole = null;
-      if (SESSION.letterbox) CAMR().letterbox(true);
-      setShot('wait', null);               // 대기 동안 투샷
+      on = true; family = e.detail.family || null; lastRole = null; plain = isPlain(family);
+      if (SESSION.letterbox) CAMR().letterbox(true, { topOnly: plain });
+      if (!plain) setShot('wait', null);   // 대기 동안 투샷
     } else {
       if (!on) return;
       on = false; lastRole = null; cancelPending();   // 예약해 둔 다음 턴·밀어 들어가기 취소
@@ -118,6 +120,7 @@
     if (!on || !CAMR() || !G || !G.conductor) return;
     const d = e.detail;
     if (d.family) family = d.family;
+    if (plain) return;                   // 만든 세션 — 턴마다의 샷 없음
     if (d.role !== 'wait' && SESSION[d.role] && d.role !== lastRole) {   // 미리 예약하지 못한 턴 (대기 없는 시작 등) — 그 턴 첫 박에 바로
       lastRole = d.role;
       const mo = motionOf(d.role);
@@ -126,5 +129,47 @@
     if (d.next) scheduleNext(d.next, d.beat);
   });
 
-  M.cameraRules = { session: SESSION, shotFor: shotFor, specOf: specOf, kinds: ['wait', 'listen', 'respond'] };   // 조정·시험용 (값 조정 도구 ?camtune)
+  // ── 필드: 홀드 미션에서 누르는 동안 메인 모아이 쪽으로 서서히 줌인, 떼면 원래 자리로 ──
+  //   대상 = 게이지를 홀드로 채우는 미션뿐 (js/field-gauge.js state().holding — 지금 누르는 뚜~가 게이지를 채우는 중). 패턴 미션에는 걸지 않는다
+  //   level (0 ~ 1) = 누르는 동안 1로, 떼면 0으로 — 선형 (일정한 빠르기). 배율 = 1 + (zoom − 1) × level
+  //     다가갈 때 · 도중에 떼어 물러날 때 = 같은 빠르기 (in초에 0 ↔ 1). 게이지를 다 채웠을 때(쉼)만 빠르게 돌아간다 (done초에 1 → 0 — 완수의 신호)
+  //     in = 'gauge' → 게이지가 비어서 다 찰 때까지 걸리는 초 (js/field-gauge.js needSec — 미션의 필요량을 따라간다): 다 차는 순간에 다 당겨진다 (도중에 줌이 멈추지 않는다)
+  //   초점 = 얼굴 쪽으로: 다 당겼을 때 얼굴(가로 = 모아이의 반전 축 · 세로 = 판정 상자의 가운데 — 에서 face만큼 비킨 점)이 화면의 at 자리에 오게 한다
+  //     가는 길 = 한 점(A)이 화면에서 제자리에 머무는 줌: 초점 = A + (가운데 − A) ÷ 배율 — 배율과 초점이 한 식으로 같이 움직인다 (A는 도착 구도에서 거꾸로 센다)
+  //     (대상을 그냥 모아이로 주면 초점이 경계 제한에 걸려 가로는 금방 다 가고 세로만 계속 가서, 옆으로 먼저 밀렸다가 자리를 잡는 것처럼 보인다)
+  //   이 연출은 이 미션(게이지를 홀드로 채우기)의 것 — 세션 · 다른 미션에는 걸지 않는다 (미션마다 쓸 연출을 따로 먹인다)
+  //   샷은 level이 있는 동안만 건다 (다 돌아오면 놓는다 — 기본 샷으로). 세션에 들어가면 바로 놓는다 (세션의 샷이 화면을 가진다 — 우선순위도 그 아래)
+  //   맞힘의 펄스 · 놓침의 셰이크는 샷 위에 얹히는 것이라 그대로 동작한다
+  const FIELD = { hold: { on: true, zoom: 1.4, priority: 1, in: 'gauge', done: 0.5, poll: 100, release: { dur: 0.3, ease: 'inOut' },
+    face: { x: 0, y: -0.09 },            // 얼굴 = 모아이 판정 상자의 가운데에서 이만큼 (캔버스 비 — 위로)
+    at: { x: 0.5, y: 0.46 } } };         // 다 당겼을 때 얼굴이 올 화면 자리 (0.5 = 가운데)
+  let gShot = null, gLevel = 0, gLast = null;
+  function holdingNow() { const g = M.fieldGauge && M.fieldGauge.state ? M.fieldGauge.state() : null; return !!(g && g.holding); }
+  function holdZoom() {                  // 카메라가 프레임마다 읽는다 (level도 여기서 한 번 나아간다)
+    const now = performance.now() / 1000, dt = gLast == null ? 0 : Math.min(0.1, now - gLast), want = holdingNow() ? 1 : 0;
+    gLast = now;
+    const inSec = FIELD.hold.in === 'gauge' ? (M.fieldGauge && M.fieldGauge.needSec ? M.fieldGauge.needSec() : 2) : FIELD.hold.in;
+    const g = M.fieldGauge && M.fieldGauge.state ? M.fieldGauge.state() : null, outSec = g && g.rest ? FIELD.hold.done : inSec;   // 다 채운 뒤(쉼)에만 빠르게
+    gLevel = want ? Math.min(1, gLevel + dt / Math.max(0.1, inSec)) : Math.max(0, gLevel - dt / Math.max(0.1, outSec));   // 선형
+    return 1 + (FIELD.hold.zoom - 1) * gLevel;
+  }
+  function holdFocus() {                 // 다 당겼을 때 얼굴이 at 자리에 오도록 — 가는 길은 한 점이 제자리에 머무는 줌
+    const P = FIELD.hold, B = CAMR().boxOf ? CAMR().boxOf('moai') : null, Z = P.zoom, z = 1 + (Z - 1) * gLevel;
+    if (!B || Z <= 1) return 'moai';
+    const ax = M.facing && M.facing.axis ? M.facing.axis() : B.x;                // 가로 = 모아이의 반전 축 (판정 상자의 가운데는 방향에 따라 좌우로 옮겨진다 — 누르는 도중 방향이 바뀌면 카메라가 옆으로 흔들렸다)
+    const F = { x: ax + P.face.x, y: B.y + P.face.y };                           // 얼굴
+    const end = { x: F.x - (P.at.x - 0.5) / Z, y: F.y - (P.at.y - 0.5) / Z };    // 다 당겼을 때의 초점
+    const A = { x: (end.x - 0.5 / Z) / (1 - 1 / Z), y: (end.y - 0.5 / Z) / (1 - 1 / Z) };   // 그 구도로 가는 줌에서 제자리에 머무는 점
+    return { x: A.x + (0.5 - A.x) / z, y: A.y + (0.5 - A.y) / z };
+  }
+  function holdDrop(opts) { if (gShot && CAMR()) CAMR().release(gShot, opts || FIELD.hold.release); gShot = null; gLast = null; gLevel = 0; }
+  if (typeof setInterval === 'function') setInterval(function() {   // 주기 타이머가 없는 환경(시뮬레이션)에서는 걸지 않는다
+    const P = FIELD.hold;
+    if (!P.on || !CAMR() || on) { if (gShot) holdDrop(); return; }             // on = 세션 중
+    if (!gShot && holdingNow()) { gLevel = 0; gLast = null; gShot = CAMR().request({ target: holdFocus, zoom: holdZoom, priority: P.priority, dur: 0, ease: 'inOut' }); }
+    else if (gShot && !holdingNow() && gLevel <= 0) holdDrop();
+  }, FIELD.hold.poll);
+  document.addEventListener('moai:session', function(e) { if (e.detail.active) holdDrop(SESSION.wait); });
+
+  M.cameraRules = { session: SESSION, field: FIELD, shotFor: shotFor, specOf: specOf, kinds: ['wait', 'listen', 'respond'] };   // 조정·시험용 (값 조정 도구 ?camtune)
 })();

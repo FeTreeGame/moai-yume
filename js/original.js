@@ -216,7 +216,6 @@
       emitNoteInput('press', pressTime);
       emitVoice('doo');
       act('hold');
-      M.ui.showFeedback('뚜!', 'hold-fb');
     });
   };
 
@@ -230,7 +229,6 @@
       playSound('pah');
       emitVoice('pah');
       act('tap');
-      M.ui.showFeedback('떽!', 'tap-fb');
     } else {
       // 엉 소리
       killSound(loopHandle, LOOP_FADE);
@@ -238,7 +236,6 @@
       playSound('wop');
       emitVoice('wop');
       act('release');
-      M.ui.showFeedback('엉!', 'tap-fb');
     }
     emitNoteInput('release');
   };
@@ -250,7 +247,6 @@
       emitNoteInput('tap');
       emitVoice('pah');
       act('tap');
-      M.ui.showFeedback('떽!', 'tap-fb');
     });
   };
 
@@ -261,7 +257,6 @@
       emitNoteInput('hold-start');
       emitVoice('doo');
       act('hold');
-      M.ui.showFeedback('뚜!', 'hold-fb');
     });
   };
 
@@ -272,7 +267,6 @@
     emitNoteInput('hold-end');
     emitVoice('wop');
     act('release');
-    M.ui.showFeedback('엉!', 'tap-fb');
   };
 
   // 뚜~ 루프 재생 중 여부 (판정의 홀드 유지 체크용 — rhythm/bridge.js)

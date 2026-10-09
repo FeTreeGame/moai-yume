@@ -30,8 +30,13 @@
   // 패턴 시작: 진행 중 루프의 남은 tick + 루프 loops개 뒤의 첫 박 (G.core.startBoundary — 세션 진입 대기와 같은 규칙). 0 = 다음 루프 첫 박
   const START = { loops: 0, credit: 0.75 };
   // 안내 목소리: 드러내는 루프에서 패턴을 칩튠 목소리(rhythm/voices.js — NPC 채널, 작게)로 부름 — 세션의 발신과 같은 자리
-  //   repeat: 'reveal' = 드러내는 루프만 (평가 루프에선 플레이어 목소리만 — 같이 울리면 덮고 대신 쳐 주는 꼴) / 'everyLoop' = 평가 루프마다도
-  const CALL = { on: true, repeat: 'reveal', gain: 0.6 };
+  //   every: 드러내는 루프 뒤 다시 부르는 주기 (루프) — 평가는 그대로 매 루프, 목소리만 보조 가이드로 되풀이 (한 번 놓쳐도 다시 들을 수 있게)
+  //     2 = 격주 (드러내는 루프 · 한 루프 쉼 · 다시 부름 …) / 1 = 평가 루프마다 (플레이어 목소리와 늘 겹침) / 0 = 드러내는 루프만
+  const CALL = { on: true, every: 2, gain: 0.6 };
+  function calls(unit) {                 // 이 루프에 부르나
+    if (unit === revealUnit) return true;
+    return CALL.every > 0 && unit >= startUnit && (unit - revealUnit) % CALL.every === 0;
+  }
 
   let spec = null;                   // 평가 켜짐 — { pool: [패턴…] }
   let on = false;                    // 코어에 붙어 있음
@@ -95,6 +100,7 @@
   function clearPicks() { Object.keys(picks).forEach(function(k) { delete picks[k]; }); }
   const user = {
     len: LEN, patternAt: patternAt, drawAt: drawAt,
+    judgedAt: function(tick) { return evaluating() && Math.floor(tick / LEN) >= startUnit; },   // 평가하는 루프의 칸 (쉼 · 드러내는 루프는 아님)
     onClear: function(unit, st) { if (evaluating()) emit('loopClear', unit, st); },
     judges: function() { return evaluating() && started(); },   // 입력: 평가 중이면 판정 — 평가 첫 박의 판정 창부터 (쉼·드러내는 루프는 친 위치만)
     marks: function() { return !!tl; },                  // 아니면 친 위치만 (박 시계가 있을 때)
@@ -104,19 +110,35 @@
   function callAt(tick, time) {
     if (!CALL.on || !evaluating() || !G.voices) return;
     const unit = Math.floor(tick / LEN);
-    if (!(unit === revealUnit || (CALL.repeat === 'everyLoop' && unit >= startUnit))) return;
+    if (!calls(unit)) return;
     if (!callOut || callOut.context !== G.actx) { callOut = G.actx.createGain(); callOut.connect(G.noteSfxOut); }
     callOut.gain.value = CALL.gain;
     const cells = patternAt(unit === revealUnit ? startUnit * LEN : tick), c = tick - unit * LEN;
     const v = cells[c] || 0, pv = c > 0 ? cells[c - 1] || 0 : 0;
-    if (v !== 2 && pv === 2 && callDoo) { callStop(time); G.voices.wop(time, callOut); }
-    if (v === 2 && pv !== 2) callDoo = G.voices.dooStart(time, callOut);
-    if (v === 1) G.voices.pah(time, callOut);
+    if (v !== 2 && pv === 2 && callDoo) { callStop(time); G.voices.wop(time, callOut); callNote('release', time); }
+    if (v === 2 && pv !== 2) { callDoo = G.voices.dooStart(time, callOut); callNote('hold', time); }
+    if (v === 1) { G.voices.pah(time, callOut); callNote('tap', time); }
+  }
+  // 콜의 음표 · 턴 알림 (연출 · 정보 HUD — js/fx-rules.js · js/hud-info.js): 소리를 예약한 시각에 화면 쪽으로
+  //   'moai:call' { type: 'tap' | 'hold' | 'release', where: 'field' } — 안내음의 음표
+  //   'moai:field-turn' { role: 'listen' (드러내는 루프 — 평가 없음) | 'respond' (평가하는 루프) | 'none' (패턴 미션이 아님), nextAt (다음 루프의 시작 — 오디오 시각), beat (한 박 — 초) }
+  function tell(type, detail, time) {
+    if (typeof CustomEvent !== 'function' || !document.dispatchEvent) return;
+    const go = function() { document.dispatchEvent(new CustomEvent(type, { detail: detail })); };
+    if (time != null && G.conductor && G.conductor.at) G.conductor.at(time, go); else go();
+  }
+  function callNote(type, time) { tell('moai:call', { type: type, where: 'field' }, time); }
+  let turnRole = 'none';
+  function fieldTurn(tick, time) {
+    const unit = Math.floor(tick / LEN), role = unit === revealUnit ? 'listen' : unit >= startUnit ? 'respond' : 'none';
+    turnRole = role;
+    tell('moai:field-turn', { role: role, nextAt: tl ? time + LEN * tl.tickSec : 0, beat: tl ? tl.tickSec * 4 : 0 }, time);
   }
   const callFeed = {
     onTick: function(tick, time) {
-      if (!evaluating()) { skippedCallTick = tick; return; }
+      if (!evaluating()) { skippedCallTick = tick; if (turnRole !== 'none') { turnRole = 'none'; tell('moai:field-turn', { role: 'none' }, time); } return; }
       skippedCallTick = -1;
+      if (tick % LEN === 0) fieldTurn(tick, time);
       callAt(tick, time);
     },
   };
@@ -183,7 +205,7 @@
     if (on) G.core.dropStats(Infinity);                // 루프 집계도 새로 (지금 루프부터 — 그 루프의 기대 수는 새 패턴으로)
     if (G.dropJudgeEvents && G.actx) G.dropJudgeEvents(G.actx.currentTime);   // 옛 패턴의 선행 예약
     plan(); lastUnit = startUnit - 1;
-    if (!s) callStop();
+    callStop();                                        // 부르던 뚜~는 여기서 끝 — 패턴이 바뀌면(미션 성공 등) 옛 패턴의 엉이 오지 않아 남는다
     syncReveal();
     // 공개 첫 박의 채널 콜백이 미션 활성화 전 지나갔다면, 비주얼과 같은 오디오 시각에 그 음성만 보충 예약
     const revealTick = revealUnit * LEN;

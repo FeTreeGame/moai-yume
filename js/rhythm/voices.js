@@ -1,8 +1,7 @@
 // ================================================
 // rhythm/voices.js — 박자 출력용 합성 (시각 지정 예약)
 //   NPC 목소리: 칩튠 떽 / 뚜~(루프) / 엉 — 출처: reference/ra/note.js (playPahSfx·startDooSfx·stopDooSfx·playWopSfx)
-//   메트로놈:   킥 / 하이햇           — 출처: reference/ra/bgm-player.js (synthKick·synthHihat, 'encounter' 음색)
-// 출력 버스: NPC = G.noteSfxOut, 메트로놈 = G.metroOut (audio.js → 믹서 채널). 목소리는 마지막 인자로 다른 출력을 받을 수 있음 (필드 안내 목소리 — 작게)
+// 출력 버스: NPC = G.noteSfxOut (audio.js → 믹서 채널). 목소리는 마지막 인자로 다른 출력을 받을 수 있음 (필드 안내 목소리 — 작게)
 // ================================================
 (function() {
   var G = window.G;
@@ -99,40 +98,7 @@
     o2.start(t); o2.stop(t + 0.16);
   }
 
-  // ── 메트로놈 ('encounter' 음색) ──
-  var KICK = { freqStart: 180, freqEnd: 35, vol: 0.45, decay: 0.12 };
-  var HIHAT = { hpFreq: 8000, closedVol: 0.035, closedDur: 0.03 };
-
-  function kick(t) {
-    var c = G.actx, p = KICK;
-    var o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(p.freqStart, t);
-    o.frequency.exponentialRampToValueAtTime(p.freqEnd, t + 0.1);
-    g.gain.setValueAtTime(p.vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + p.decay);
-    o.connect(g).connect(G.metroOut);
-    o.start(t); o.stop(t + p.decay + 0.01);
-  }
-
-  function hihat(t) {
-    var c = G.actx, p = HIHAT, dur = p.closedDur;
-    var len = c.sampleRate * dur;
-    var buf = c.createBuffer(1, len, c.sampleRate);
-    var d = buf.getChannelData(0);
-    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    var n = c.createBufferSource(), g = c.createGain();
-    var f = c.createBiquadFilter();
-    f.type = 'highpass'; f.frequency.value = p.hpFreq;
-    n.buffer = buf;
-    g.gain.setValueAtTime(p.closedVol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    n.connect(f).connect(g).connect(G.metroOut);
-    n.start(t); n.stop(t + dur + 0.01);
-  }
-
   G.voices = {
-    pah: pah, dooStart: dooStart, dooStop: dooStop, wop: wop,
-    kick: kick, hihat: hihat
+    pah: pah, dooStart: dooStart, dooStop: dooStop, wop: wop
   };
 })();

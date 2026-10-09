@@ -8,7 +8,7 @@
 //     toWorld(clientX, clientY) = 화면 → 월드 (캔버스 비) 역변환 — 줌해도 보이는 곳 = 눌리는 곳 (field-actors.js 뗀 자리 · facing.js 포인터)
 //     경계: 초점을 필드 안으로 제한 (줌 ≥ 1에서 4:3 필드 밖이 보이지 않게 — CAM.clamp)
 //     연출자: 샷 요청 스택 — request(shot) → id / release(id). 우선순위가 높은(같으면 나중) 샷이 이김, 다 풀리면 기본 샷
-//       shot = { target, zoom, rot, dur(초 — 0 = 컷), ease, priority, at(시작 — 오디오 시계, 선택: Conductor 시각으로 박에 맞춤),
+//       shot = { target, zoom (수 또는 함수 → 수: 함수면 프레임마다 읽어 그 값을 따라간다), rot, dur(초 — 0 = 컷), ease, priority, at(시작 — 오디오 시계, 선택: Conductor 시각으로 박에 맞춤),
 //                offset { x, y } (대상 가운데에서 초점을 비킴 — 캔버스 비, 선택), fit (투샷 — false면 자동 맞춤 없이 zoom 그대로),
 //                maxZoom (이 샷의 배율 상한 — 없으면 CAM.maxZoom. 예: 미니 모아이는 작게 그려져 원본 해상도 여유가 커서 더 높게) }
 //       target = 점 {x, y} · 'moai' · 필드 인스턴스(액터) · 함수 → {x, y} · [대상, 대상] (투샷 — 둘 다 들어오는 배율로, zoom은 상한)
@@ -37,9 +37,11 @@
     mods: {
       shake: { on: true, offset: 0.025, rot: 0.03, decay: 1.2, freq: 22, pad: 0.06 },   // 최대 이동(캔버스 비)·회전(라디안), 초당 감소, 흔들림 빈도, 가장자리 숨김 확대
       pulse: { on: true, amp: 0.03, dur: 0.25 },
+      jolt: { on: true, amp: 0.012, dur: 0.28, freq: 16 },   // 수평 셰이크: 좌우 이동(캔버스 비) · 길이(초) · 빈도 — 맞은 듯 좌우로만 털고 가라앉는다
       tilt: { on: true, dur: 0.4 },
-      parallax: { on: false, back: 0.6 },
-      letterbox: { on: true, size: 0.07, dur: 0.4, inset: true },   // 위아래 띠 높이 (상자 높이 비) — inset이면 켜는 동안 안전 영역(insets)이 됨 (아래 띠에 루프 막대)
+      lean: { on: true, cap: 0.06, dur: 0.4 },   // 지금 샷에 곱해지는 느린 배율 (이름마다 따로 — 더한 값의 상한 cap: 멀미)
+      parallax: { on: false, back: 0.6 },   // 켜려면 배경 그림을 자르지 않은 것으로 (지금 배경은 땅이 덮는 아래쪽이 없다 — tools/asset-web.py PLAIN의 crop)
+      letterbox: { on: true, size: 0.1, dur: 0.4, inset: true },   // 위아래 띠 높이 (상자 높이 비) — inset이면 켜는 동안 안전 영역(insets)이 됨 (아래 띠에 루프 막대)
       vignette: { on: true, strength: 0.55, dur: 0.4 },
     },
   };
@@ -100,7 +102,7 @@
   }
   function goalOf(s) {
     if (!s) return copy(HOME);
-    let zoom = s.zoom != null ? s.zoom : 1.3, x = HOME.x, y = HOME.y;
+    let zoom = typeof s.zoom === 'function' ? s.zoom() : (s.zoom != null ? s.zoom : 1.3), x = HOME.x, y = HOME.y;   // zoom이 함수면 프레임마다 읽는다 (값을 따라가는 샷 — 예: 게이지)
     if (Array.isArray(s.target)) {        // 투샷: 두 대상 상자를 다 담는 배율 (zoom은 상한 — fit false면 zoom 그대로)
       const bs = s.target.map(boxOf).filter(Boolean);
       if (bs.length) {
@@ -187,6 +189,15 @@
       apply: function(v, t) { if (!p || t < p.t0) return; v.zoom *= 1 + p.amp * (1 - ease('out', (t - p.t0) / p.dur)); },
     };
   })();
+  MODS.jolt = (function() {                // 수평 셰이크 — 좌우로만 (회전 · 상하 없음), 시간에 따라 가라앉음
+    let j = null;                          // { t0, amp, dur }
+    return {
+      fire: function(opts) { const P = CAM.mods.jolt; j = { t0: clock(), amp: opts && opts.amp != null ? opts.amp : P.amp, dur: opts && opts.dur || P.dur }; wake(); },
+      active: function(t) { return !!j && t < j.t0 + j.dur; },
+      step: function(t) { if (j && t >= j.t0 + j.dur) j = null; },
+      apply: function(v, t) { if (!j || t < j.t0) return; const k = (t - j.t0) / j.dur; v.ox += j.amp * (1 - k) * (1 - k) * Math.sin((t - j.t0) * CAM.mods.jolt.freq * 6.283); },
+    };
+  })();
   MODS.tilt = (function() {
     let from = 0, to = 0, t0 = 0, dur = 0;
     function now(t) { return dur > 0 ? lerp(from, to, ease('inOut', (t - t0) / dur)) : to; }
@@ -197,12 +208,35 @@
       apply: function(v, t) { v.rot += now(t); },
     };
   })();
+  // 다가감 · 물러남: 샷을 바꾸지 않고 지금 샷의 배율에 곱한다 (샷은 자리를 통째로 바꿔 세션의 턴 샷과 싸운다 — 이것은 그 위에 얹힌다)
+  //   이름마다 따로 (연속 · 홀드 · 턴 …) — set(이름, 양 (0.03 = 3% 다가감, 음수 = 물러남), { dur, at, ease }). 더한 값은 ±cap 안
+  //   물러남은 배율이 1보다 클 때만 (기본 샷에서 물러나면 그림의 바깥이 드러난다)
+  MODS.lean = (function() {
+    const L = {};
+    function val(l, t) { return l.dur > 0 ? lerp(l.from, l.to, ease(l.ease || 'inOut', (t - l.t0) / l.dur)) : (t >= l.t0 ? l.to : l.from); }
+    return {
+      set: function(key, amount, opts) { const t = clock(), l = L[key]; L[key] = { from: l ? val(l, t) : 0, to: amount || 0, t0: opts && opts.at != null ? opts.at : t, dur: opts && opts.dur != null ? opts.dur : CAM.mods.lean.dur, ease: opts && opts.ease }; wake(); },
+      active: function(t) { return Object.keys(L).some(function(k) { return t < L[k].t0 + L[k].dur; }); },
+      step: function(t) { Object.keys(L).forEach(function(k) { if (L[k].to === 0 && t >= L[k].t0 + L[k].dur) delete L[k]; }); },
+      apply: function(v, t) {
+        let s = 0; Object.keys(L).forEach(function(k) { s += val(L[k], t); });
+        const cap = CAM.mods.lean.cap; s = Math.max(-cap, Math.min(cap, s));
+        if (s) v.zoom = Math.max(Math.min(1, v.zoom), v.zoom * (1 + s));
+      },
+      sum: function(t) { let s = 0; Object.keys(L).forEach(function(k) { s += val(L[k], t == null ? clock() : t); }); const cap = CAM.mods.lean.cap; return Math.max(-cap, Math.min(cap, s)); },
+    };
+  })();
   MODS.parallax = {
     active: function() { return false; },
     step: function() {},
     factor: function(layer) { const P = CAM.mods.parallax; return P.on && layer === 'back' ? P.back : 1; },
   };
   // 화면 층 오버레이 (캔버스 상자 위 DOM — 변환과 무관)
+  function setVar(el, name, v) {     // 값이 바뀔 때만 넣는다 (켜는 순간마다 상자 전체의 스타일을 다시 계산시키지 않게)
+    if (!el || !el.style || !el.style.setProperty) return;
+    if (el.style.getPropertyValue && el.style.getPropertyValue(name) === v) return;
+    el.style.setProperty(name, v);
+  }
   function overlay(cls, styleFn) {
     let el = null;
     function ensure() {
@@ -211,18 +245,24 @@
       if (!box) return null;
       el = document.createElement('div');
       el.className = 'cam-overlay ' + cls;
-      const canvas = M.el && M.el.spriteCanvas;   // 필드 캔버스 바로 위 — 가이드 막대·게이지·HUD(화면 층 정보)보다는 아래
+      const canvas = (M.el && M.el.spriteCanvas) || (box.querySelector ? box.querySelector('.sprite-canvas') : null);   // 필드 캔버스 바로 위 — 가이드 막대·게이지·HUD(화면 층 정보)보다는 아래
       if (canvas && canvas.parentNode === box) box.insertBefore(el, canvas.nextSibling); else box.appendChild(el);
+      styleFn(el);
       return el;
     }
     return {
+      // 요소는 모듈이 로드될 때 미리 만들어 둔다 (prepare — 아래). 처음 켜는 순간에 만들면 '꺼진 상태'가 한 번도 없어 전환이 빠지고 (툭 나타난다),
+      //   그 순간에 분위기 층(js/atmo.js)이 띠 아래로 자기를 다시 꽂느라 그쪽의 전환도 끊겼다 (docs/SCREEN-LAYERS.md)
+      prepare: function() { ensure(); },
       set: function(on) { const e = ensure(); if (!e) return; styleFn(e); e.classList.toggle('on', !!on); },
+      mark: function(name, v) { const e = ensure(); if (e) e.classList.toggle(name, !!v); },   // 덧붙이는 표시 (레터박스의 'top-only' — 위쪽 띠만)
       on: function() { return !!(el && el.classList.contains('on')); },
     };
   }
-  MODS.letterbox = overlay('cam-letterbox', function(e) { const P = CAM.mods.letterbox; e.style.setProperty('--lb', (P.size * 100) + '%'); e.style.transitionDuration = P.dur + 's'; });
+  MODS.letterbox = overlay('cam-letterbox', function(e) { const P = CAM.mods.letterbox; const lb = (P.size * 100) + '%'; setVar(e, '--lb', lb); setVar(e.parentNode, '--lb', lb);   /* 상자에도 — 띠 안에 놓이는 것(세션의 턴 표시: style.css .hud-info.in-session)이 띠의 높이를 읽는다 */ setVar(e, '--lb-dur', P.dur + 's'); });
   MODS.vignette = overlay('cam-vignette', function(e) { const P = CAM.mods.vignette; e.style.setProperty('--vg', P.strength); e.style.transitionDuration = P.dur + 's'; });
-  const VIEW_MODS = ['shake', 'pulse', 'tilt'];   // 자세에 더하는 기여자 (순서대로)
+  MODS.letterbox.prepare(); MODS.vignette.prepare();   // 미리 만들어 둔다 (위 overlay의 설명)
+  const VIEW_MODS = ['shake', 'lean', 'pulse', 'jolt', 'tilt'];   // 자세에 더하는 기여자 (순서대로)
 
   // ── 지금 보기 (층별) ──
   function view(layer, t) {
@@ -283,13 +323,19 @@
     shots: function() { return shots.map(function(s) { return Object.assign({}, s); }); },
     identity: function() { return identityView(view('world')) && identityView(view('back')); },
     at: at,
+    boxOf: boxOf,                          // 대상의 가운데 · 크기 { x, y, w, h } (캔버스 비) — 연출 규칙이 초점을 직접 셀 때
     shake: function(amount) { MODS.shake.add(amount); },
     pulse: function(opts) { MODS.pulse.fire(opts); },
+    jolt: function(opts) { MODS.jolt.fire(opts); },
     tilt: function(deg, opts) { MODS.tilt.set(deg, opts); },
-    letterbox: function(on) {             // 켜는 동안 안전 영역 (정책 inset) — 지금 샷의 틀이 그 안쪽으로 다시 잡힘
+    lean: function(key, amount, opts) { MODS.lean.set(key, amount, opts); },
+    leaning: function() { return MODS.lean.sum(); },
+    letterbox: function(on, opts) {       // 켜는 동안 안전 영역 (정책 inset) — 지금 샷의 틀이 그 안쪽으로 다시 잡힘. opts.topOnly = 위쪽 띠만 (아래 띠가 가리면 안 되는 것이 있을 때 — 만든 세션의 구구)
+      const topOnly = !!(on && opts && opts.topOnly);
+      if (on) MODS.letterbox.mark('top-only', topOnly);   // 끌 때는 그대로 둔다 (걷히는 동안 아래 띠가 잠깐 나타나지 않게 — 다음에 켤 때 다시 정한다)
       MODS.letterbox.set(on);
       const P = CAM.mods.letterbox;
-      if (P.inset) { CAM.insets.top = CAM.insets.bottom = on ? P.size : 0; if (shots.length) retarget(null, P.dur); }   // 샷이 있을 때만 다시 잡음 (기본 샷으로 돌아오는 중이면 그 전환을 덮지 않음)
+      if (P.inset) { CAM.insets.top = on ? P.size : 0; CAM.insets.bottom = on && !topOnly ? P.size : 0; if (shots.length) retarget(null, P.dur); }   // 샷이 있을 때만 다시 잡음 (기본 샷으로 돌아오는 중이면 그 전환을 덮지 않음)
     },
     vignette: function(on) { MODS.vignette.set(on); },
     trauma: function() { return MODS.shake.trauma(); },

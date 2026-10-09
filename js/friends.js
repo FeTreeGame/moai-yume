@@ -22,17 +22,22 @@
   const joined = {};           // 스테이지 id → true
   M.friendsShowAll = false;    // 레이아웃 편집기용: 합류 여부와 무관하게 모두 표시
 
-  FRIENDS.forEach(function(f) {
+  // 그림은 그릴 일이 생길 때 싣는다 (지금은 그리지 않으므로 내려받지 않는다 — 일곱 장 약 3.4MB)
+  function ensure(f) {
+    if (f.img) return f.img;
     f.img = new Image();
     f.img.onload = function() { if (((FRIENDS_SHOW.render && joined[f.stage]) || M.friendsShowAll) && M.spriteRedraw) M.spriteRedraw(); };
     f.img.src = 'assets/friends/' + f.id + '.png';
-  });
+    return f.img;
+  }
 
   // 그릴 친구 레이어 목록 — sprite.js가 모아이 레이어와 합쳐 심도(z) 순으로 그린다
   M.friendLayers = function() {
     const out = [];
     FRIENDS.forEach(function(f) {
-      if (!((FRIENDS_SHOW.render && joined[f.stage]) || M.friendsShowAll) || !f.img.complete || !f.img.naturalWidth) return;
+      if (!((FRIENDS_SHOW.render && joined[f.stage]) || M.friendsShowAll)) return;
+      ensure(f);
+      if (!f.img.complete || !f.img.naturalWidth) return;
       out.push({ id: f.id, z: M.LAYOUT[f.id].z, draw: function(ctx, W, H) { M.drawPlaced(ctx, f.img, f.id, W, H); } });
     });
     return out;

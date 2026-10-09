@@ -1,5 +1,7 @@
 // 커스텀 스크롤 트랙: .scroll-track 터치/드래그로 .drawer-scroll-content의 scrollTop 제어
-// 콘텐츠 영역은 touch-action: none (터치 스크롤 차단), 스크롤 트랙만 조작 가능
+// 콘텐츠 영역은 touch-action: none (터치 스크롤 차단), 스크롤 트랙만 조작 가능. 마우스 휠은 콘텐츠 위에서 그대로 넘긴다
+// 막대가 보이는가는 여기서 정하지 않는다 — 손가락만 쓰는 기기에서만 (style.css html.handheld, 판별은 state.js Moai.device)
+//   그 밖(PC)은 커스텀 막대를 숨기고 브라우저의 스크롤을 쓴다 (기본 스크롤 막대 · 휠)
 (function() {
   function initScrollTrack(parent) {
     var track = parent.querySelector('.scroll-track');
@@ -132,14 +134,12 @@
 
     // 마우스 휠은 콘텐츠에서도 허용 (touch-action: none은 터치만 차단)
     content.addEventListener('wheel', function(e) {
+      if (!window.Moai.device.handheld) return;   // PC: 브라우저의 스크롤이 맡는다
       content.scrollTop += e.deltaY;
       e.preventDefault();
       updateThumb();
     }, { passive: false });
   }
-
-  // PC 판별: 터치 불가 디바이스
-  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
   // .scroll-track을 가진 모든 컨테이너에 적용
   function initAll() {
@@ -147,16 +147,6 @@
     for (var i = 0; i < tracks.length; i++) {
       var parent = tracks[i].parentElement;
       if (!parent) continue;
-      if (!isTouch) {
-        // PC: 커스텀 트랙 숨기고 네이티브 스크롤 복원
-        tracks[i].style.display = 'none';
-        var content = parent.querySelector('.drawer-scroll-content');
-        if (content) {
-          content.style.overflowY = 'auto';
-          content.style.touchAction = '';
-        }
-        continue;
-      }
       if (!parent._scrollTrackInit) {
         initScrollTrack(parent);
         parent._scrollTrackInit = true;

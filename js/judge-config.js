@@ -1,94 +1,108 @@
-// 판정 창 설정 (설정 탭) — 절대치(ms) / 상대치(칸 %) 선택, 프리셋(EASY·NORMAL·HARD), ACE·GOOD·BARELY 슬라이더
-// 값·환산·순서 유지는 judge.js (G.getJudgeConfig·setJudgeValue·setJudgeMode·setUnitType), 여기는 UI와 저장만 (localStorage, 기기별)
-//   상대치 % = 창 전체 폭 ÷ 칸 (100% = 가이드 막대 구멍이 칸에 꽉 참, 초과 허용 — 판정은 이웃 칸까지)
-//   안내: 현재 BPM·칸 길이, 막대 표시 한계(100% 초과) — 막지 않고 알리기만
+// 판정 창 설정 (설정 탭) — 고르기(EASY·NORMAL·HARD + 직접 바꾼 값 CUSTOM) + 범위 그림 + 손잡이 버튼 셋 (ACE · GOOD · BARELY)
+//   단위는 하나: 상대치 = 창 전체 폭 ÷ 칸 (100% = 가이드 막대 구멍이 칸에 꽉 참). 칸은 BPM을 따라가므로 그림은 BPM과 무관하다
+//   (절대치(ms) 방식은 화면에 없다 — 판정 쪽 장치는 남아 있다: judge.js setJudgeMode. 절대치로 저장된 값은 읽을 때 상대치로 환산)
+//   범위 그림 (보여 주기만): 좌우 대칭이라 한쪽만 — 왼쪽 끝 = 음표의 정박, 오른쪽 끝 = BOUND.max, 점선 = 칸 경계 (100%)
+//   손잡이: 등급 버튼을 누른 채 좌우로 밀면 그 등급의 경계가 움직인다 (그림과 같은 축척 — 손가락이 간 만큼)
+//     누른 손가락을 기억한다 — 버튼 밖으로 나가도 뗄 때까지 이어지고, 그동안 다른 손가락은 받지 않는다
+//     경계조건: 그 등급만 움직인다. 이웃에서 한 단위(BOUND.step) 떨어진 곳에서 멈춤 — 이웃을 밀지 않고, 같아지지도 않는다 (ACE < GOOD < BARELY)
+//   고르기 = 값 넘기기 줄 (js/ui.js stepper — 순환). 밀어서 바꾸면 그 값이 CUSTOM에 보관되고 CUSTOM이 고른 것이 된다
+//   (CUSTOM은 값을 바꾼 뒤에야 목록에 생김 — 프리셋으로 넘어가도 남아 있어 다시 고를 수 있다. 기본값 버튼 = 기본 프리셋으로, CUSTOM도 지움)
+// 값·환산은 judge.js (G.getJudgeConfig·setJudgeValue·setUnitType), 여기는 UI와 저장만 (localStorage, 기기별)
+//   안내 한 줄: 지금 템포에서 그 범위가 몇 ms인가 (참고 — 템포가 바뀌면 달라진다)
 (function() {
   var G = window.G;
   var KEY = 'moai.judge';
   try { G.loadJudgeConfig(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {}
+  if (G.getJudgeConfig().mode !== 'rel') G.setJudgeMode('rel');   // 화면의 단위는 상대치 하나
   function save() { try { localStorage.setItem(KEY, JSON.stringify(G.getJudgeConfig())); } catch (e) {} }
 
-  var rows = document.getElementById('judgeRows');
-  if (!rows) return;
-  var modeBox = document.getElementById('judgeModes');
+  var box = document.getElementById('judgeBound');
+  var grips = document.getElementById('judgeGrips');
+  if (!box || !grips) return;
   var presetBox = document.getElementById('judgePresets');
   var note = document.getElementById('judgeNote');
-  var GRADES = [{ id: 'ace', name: 'ACE' }, { id: 'good', name: 'GOOD (HIT 경계)' }, { id: 'barely', name: 'BARELY' }];
-  var MODES = [{ id: 'abs', name: '절대치 ms' }, { id: 'rel', name: '상대치 %' }];
-  var PRESETS = [{ id: 'easy', name: 'EASY' }, { id: 'normal', name: 'NORMAL' }, { id: 'hard', name: 'HARD' }];
-  // 슬라이더 범위: 절대치 ±5~200 ms (5 단위) / 상대치 2~200 % (1 단위)
-  var RANGE = { abs: { min: 5, max: 200, step: 5, scale: 1000 }, rel: { min: 2, max: 200, step: 1, scale: 100 } };
+  var GRADES = [{ id: 'ace', name: 'ACE' }, { id: 'good', name: 'GOOD' }, { id: 'barely', name: 'BARELY' }];   // 안쪽부터. GOOD까지가 맞힘 (HIT)
+  // 범위의 한계 (상대치 — 1 = 한 칸): 그림의 오른쪽 끝 = max, 조정 단위이자 이웃과의 최소 간격 = step (가장 안쪽의 최소도 step)
+  var BOUND = { max: 2.5, step: 0.05 };
 
   function slotMs() { return G.BEAT_SEC / 4 * 1000; }
-  function pctOf(k) { return G.getJudgeWindows()[k] * 2000 / slotMs() * 100; }   // 창 전체 폭 ÷ 칸 (%)
-  function texts(k) {
-    var ms = G.getJudgeWindows()[k] * 1000, pct = pctOf(k);
-    return G.getJudgeConfig().mode === 'abs'
-      ? { val: '±' + Math.round(ms) + 'ms', sub: '칸 ' + Math.round(pct) + '%' }
-      : { val: Math.round(pct) + '%', sub: '±' + Math.round(ms) + 'ms' };
-  }
-  function sliderVal(k) { var c = G.getJudgeConfig(); return Math.round(c[k] * RANGE[c.mode].scale); }
+  function val(k) { return G.getJudgeConfig()[k]; }                // 상대치 (창 전체 폭 ÷ 칸)
+  function snap(v) { return Math.round(Math.round(v / BOUND.step) * BOUND.step * 100) / 100; }
 
-  function buttons(list, active, attr) {
-    return list.map(function(b) {
-      return '<button class="beat-pattern-btn' + (b.id === active ? ' active' : '') + '" ' + attr + '="' + b.id + '" tabindex="-1">' + b.name + '</button>';
-    }).join('');
-  }
-  function renderNote() {
-    if (!note) return;
-    var lines = ['현재 ' + Math.round(G.BPM) + ' BPM · 1칸 ' + Math.round(slotMs()) + 'ms'];
-    if (pctOf('good') > 100) lines.push('<span class="warn">GOOD 칸 100% 초과 — 구멍은 칸에 꽉 차고 판정은 이웃 칸까지 (막대 표시 한계)</span>');
-    if (pctOf('barely') > 100) lines.push('<span class="warn">BARELY 끝선이 이웃 칸으로 넘어감</span>');
-    note.innerHTML = lines.join('<br>');
-  }
-  // 값 표시만 갱신 (슬라이더를 다시 만들지 않는다 — 끄는 중인 슬라이더 유지). skip = 지금 끄는 슬라이더
-  function refresh(skip) {
+  var M = window.Moai;
+  var presetStep = M && M.ui && M.ui.stepper ? M.ui.stepper(presetBox, {
+    items: function() { return G.judgePresets(); },
+    get: function() { return G.judgePreset(); },
+    set: function(id) { G.setUnitType(id); save(); refresh(); },
+  }) : { render: function() {} };
+
+  // 그림 · 수치 · 안내 갱신 (뼈대는 그대로 — 미는 중에도 부른다)
+  function refresh() {
     GRADES.forEach(function(g) {
-      var row = rows.querySelector('[data-id="' + g.id + '"]'), t = texts(g.id);
-      row.querySelector('.mixer-val').textContent = t.val;
-      row.querySelector('.judge-sub').textContent = t.sub;
-      if (g.id !== skip) row.querySelector('input').value = sliderVal(g.id);
+      var v = val(g.id);
+      box.querySelector('.jb-' + g.id).style.width = Math.min(100, v / BOUND.max * 100) + '%';   // 한계를 넘는 값(옛 저장값)은 끝까지
+      grips.querySelector('[data-id="' + g.id + '"] .jb-num').textContent = Math.round(v * 100);
     });
-    if (presetBox) presetBox.innerHTML = buttons(PRESETS, G.getJudgeConfig().preset, 'data-preset');
-    renderNote();
+    presetStep.render();
+    if (note) note.textContent = Math.round(G.BPM) + ' BPM에서 ' + GRADES.map(function(g) {
+      return '±' + Math.round(val(g.id) * slotMs() / 2);
+    }).join(' · ') + 'ms';
   }
   function render() {
-    var c = G.getJudgeConfig(), r = RANGE[c.mode];
-    if (modeBox) modeBox.innerHTML = buttons(MODES, c.mode, 'data-mode');
-    rows.innerHTML = GRADES.map(function(g) {
-      // [이름 환산값 값] / [슬라이더]
-      return '<div class="mixer-row" data-id="' + g.id + '">' +
-        '<div class="mixer-head"><label>' + g.name + '</label><span class="judge-sub"></span><span class="mixer-val judge-val"></span></div>' +
-        '<input type="range" min="' + r.min + '" max="' + r.max + '" step="' + r.step + '"></div>';
+    // 띠는 바깥 것부터 (안쪽 것이 위에 그려진다), 칸 경계는 맨 위
+    box.innerHTML = GRADES.slice().reverse().map(function(g) { return '<div class="jb-band jb-' + g.id + '"></div>'; }).join('') +
+      '<div class="jb-slot" style="width:' + (100 / BOUND.max) + '%"><span>1칸</span></div>';
+    grips.innerHTML = GRADES.map(function(g) {
+      return '<div class="jb-col jb-' + g.id + '" data-id="' + g.id + '">' +
+        '<button class="ctrl-btn jb-grip" type="button" tabindex="-1" aria-label="' + g.name + ' 범위 — 누른 채 좌우로">' + g.name + '</button>' +
+        '<span class="jb-num"></span></div>';
     }).join('');
-    refresh(null);
+    refresh();
   }
 
-  rows.addEventListener('input', function(e) {
-    var row = e.target.closest('.mixer-row');
-    if (!row || e.target.type !== 'range') return;
-    var id = row.getAttribute('data-id');
-    G.setJudgeValue(id, e.target.value / RANGE[G.getJudgeConfig().mode].scale);
-    save();
-    refresh(id);
-  });
-  // 버튼 묶음: 터치는 touchend에서 처리하고 뒤따르는 click은 무시 (믹서와 같은 방식)
-  function bindTap(box, attr, fn) {
-    if (!box) return;
-    var touched = false;
-    var pick = function(e) { var b = e.target.closest('[' + attr + ']'); if (b) { fn(b.getAttribute(attr)); save(); render(); } };
-    box.addEventListener('touchend', function(e) { if (!e.target.closest('[' + attr + ']')) return; e.preventDefault(); touched = true; pick(e); }, { passive: false });
-    box.addEventListener('click', function(e) { if (touched) { touched = false; return; } pick(e); });
+  // ── 밀기 ──
+  // 그 등급이 갈 수 있는 범위: 안쪽 이웃 + 한 단위 ~ 바깥 이웃 − 한 단위 (끝은 한 단위 ~ 한계)
+  function limits(id) {
+    var i = GRADES.map(function(g) { return g.id; }).indexOf(id), s = BOUND.step;
+    return { lo: snap(i > 0 ? val(GRADES[i - 1].id) + s : s), hi: snap(i < GRADES.length - 1 ? val(GRADES[i + 1].id) - s : BOUND.max) };
   }
-  bindTap(modeBox, 'data-mode', G.setJudgeMode);
-  bindTap(presetBox, 'data-preset', G.setUnitType);
+  var drag = null;   // { id, x0, v0, pointer } — 한 번에 손가락 하나
+  grips.addEventListener('pointerdown', function(e) {
+    var btn = e.target.closest('.jb-grip');
+    if (!btn || drag) return;
+    var id = btn.parentNode.getAttribute('data-id');
+    drag = { id: id, x0: e.clientX, v0: val(id), pointer: e.pointerId, btn: btn };
+    try { btn.setPointerCapture(e.pointerId); } catch (err) {}   // 버튼 밖으로 나가도 이 손가락의 움직임을 받는다
+    btn.parentNode.classList.add('on');
+    e.preventDefault();
+  });
+  grips.addEventListener('pointermove', function(e) {
+    if (!drag || e.pointerId !== drag.pointer) return;
+    var w = box.getBoundingClientRect().width;
+    if (!w) return;
+    var lim = limits(drag.id);
+    if (lim.lo > lim.hi) return;                                  // 이웃 사이에 자리가 없음 (옛 저장값) — 이웃부터 벌려야 한다
+    var v = Math.min(lim.hi, Math.max(lim.lo, snap(drag.v0 + (e.clientX - drag.x0) / w * BOUND.max)));
+    if (Math.abs(v - val(drag.id)) < 1e-9) return;                // 누르기만 한 것으로는 바뀌지 않는다 (CUSTOM이 되지 않게)
+    G.setJudgeValue(drag.id, v);
+    save();
+    refresh();
+  });
+  function end(e) {
+    if (!drag || e.pointerId !== drag.pointer) return;
+    drag.btn.parentNode.classList.remove('on');
+    drag = null;
+  }
+  grips.addEventListener('pointerup', end);
+  grips.addEventListener('pointercancel', end);
+
   var resetBtn = document.getElementById('judgeReset');
   if (resetBtn) resetBtn.addEventListener('click', function() {
     G.resetJudgeConfig();
     try { localStorage.removeItem(KEY); } catch (e) {}
-    render();
+    refresh();
   });
-  // 설정 탭을 열 때 다시 그림 (세션이 BPM을 바꿨을 수 있음 — 환산값·안내 갱신)
-  document.addEventListener('click', function(e) { if (e.target.closest('[data-drawer="config"]')) render(); });
+  // 설정 탭을 열 때 다시 그림 (세션이 BPM을 바꿨을 수 있음 — 안내의 ms 갱신)
+  document.addEventListener('click', function(e) { if (e.target.closest('[data-drawer="config"]')) refresh(); });
   render();
 })();

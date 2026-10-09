@@ -87,6 +87,11 @@
     // 헛침은 성공 확정 전(whiff) / 후(whiffAfter)로 나눠 센다 — 확정 뒤 헛침은 끝난 단위를 뒤집지 않음
     if (kind === 'whiff' && st.done) st.whiffAfter++;
     else st[kind]++;
+    // 음표 하나의 판정 알림 'moai:judge' { kind: 'hit' | 'miss' | 'whiff'(헛침 — 맞는 음표가 없는 입력, tick = 입력한 칸), tick } — 상태만. 무엇을 보이고 울릴지는 연출 연결표 (js/fx-rules.js)
+    //   단위 성공(onClear — 아래)보다 먼저 알린다: 마지막 음표의 맞힘이 먼저 가고, 그 다음에 '다 맞혔다'가 간다 (마지막 성공의 이펙트가 그 음표 자리를 안다)
+    //   'hold' = 홀드를 끝까지 맞힘 (집계의 holdHit — 떼는 순간. 누른 순간의 맞힘은 'hit'으로 먼저 갔다)
+    if ((kind === 'hit' || kind === 'miss' || kind === 'whiff' || kind === 'holdHit') && typeof CustomEvent === 'function' && typeof document !== 'undefined' && document.dispatchEvent)
+      document.dispatchEvent(new CustomEvent('moai:judge', { detail: { kind: kind === 'holdHit' ? 'hold' : kind, tick: tick } }));
     if (!st.done && st.expect > 0 && st.miss === 0 && st.holdMiss === 0 && st.hit + st.holdHit === st.expect) {
       st.done = true;
       if (owner.onClear) owner.onClear(unit, st);
@@ -106,6 +111,7 @@
     attach: function(user) {
       owner = user;
       resetMarks();
+      if (G.reveal && G.reveal.resetMarks) G.reveal.resetMarks();   // 드러내기 층의 맞힘 표시도 — tick을 다시 세므로 옛 격자의 표시가 같은 번호에 비치지 않게
       G.noteTargetObj = { patternAt: user.drawAt || user.patternAt };   // 막대 (hud.js) — 판정은 patternAt
       G.noteInputLen = user.len;
       G.resetJudgeStats();
@@ -153,6 +159,12 @@
       G.noteInputMarks.push({ abs: G.timeToBeat(t) * 4, type: type === 'press' ? 'tap' : type, res: null });
     },
     eventsAt: eventsAt,
+    // 그 칸이 판정 대상인가 = 플레이어가 칠 차례인가 (쓰는 쪽의 judgedAt — 세션: 응답 단위 / 필드: 평가 중인 루프). 가이드의 수렴 윤곽이 묻는다 (rhythm/approach.js)
+    //   0칸보다 앞 = 아직 시작 전 (세션은 시작 시각을 예약해 두고 자리를 먼저 붙인다) — 누구의 차례도 아니다
+    judgedAt: function(tick) { return tick >= 0 && !!(owner && (owner.judgedAt ? owner.judgedAt(tick) : true)); },
+    // 그 칸의 판정용 패턴 (쓰는 쪽의 patternAt — 그리기용 drawAt이 아니라). 앞을 내다보는 층이 쓴다 (rhythm/approach.js):
+    //   필드의 그리기용은 아직 시작하지 않은 평가 첫 루프를 비워 돌려준다 (옛 막대에서 경계 앞에 첫 음표가 새어 보이지 않게) — 내다보는 쪽은 그것을 읽으면 첫 박을 놓친다
+    judgePatternAt: function(tick) { return owner && owner.patternAt ? owner.patternAt(tick) : null; },
     stats: function(unit) { return stats[unit]; },
     dropStats: function(unit) { Object.keys(stats).forEach(function(k) { if (+k <= unit) delete stats[k]; }); },
     // 판정 사건 공급 채널 (Conductor 타임라인에 붙임): judged(tick)가 참인 tick의 사건을 판정에 등록 ('hold' 유지 포함 — judge.js가 다룸)

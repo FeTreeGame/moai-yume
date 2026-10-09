@@ -254,6 +254,14 @@ function loopIndex(inst, step, len) {
 
 // 스텝 하나 예약 (step = 16분음표 번호, time = 오디오 시각)
 // 원본 스케줄러 루프 본문 — 세션 반주로 쓸 때는 Conductor 채널의 onTick(tick, time)이 이 함수를 부르면 된다
+// 북 알림 'moai:drum' { drum: 'kick' | 'snare', time (울리는 오디오 시각), step (16칸 중), gap (같은 북이 다음에 울릴 때까지 — 초), accent (마디의 첫 칸), tl (그 곡의 타임라인) }
+//   소리를 예약한 그 시각에 화면 쪽으로 알린다 (C.at) — 화면의 박 = 킥 (정박이 아니다: 곡마다 킥의 무늬가 다르다). 듣는 쪽: 연출 연결표 js/fx-rules.js
+function notifyDrum(inst, did, s16, time, dpat) {
+  if (typeof document === 'undefined' || typeof CustomEvent !== 'function' || !document.dispatchEvent) return;
+  var k = 1; while (k < 16 && !dpat[(s16 + k) % 16]) k++;
+  var detail = { drum: did, time: time, step: s16, gap: k * inst.stepSec, accent: s16 === 0, tl: inst.tl || null };
+  C.at(time, function() { document.dispatchEvent(new CustomEvent('moai:drum', { detail: detail })); });
+}
 function playStep(inst, step, time) {
   var c = G.actx;
   var out = inst.out || G.bgmOut;
@@ -268,6 +276,7 @@ function playStep(inst, step, time) {
     var dpat = d.drums[did];
     if (dpat[s16] && drumSynth[did]) {
       drumSynth[did](c, out, time, th);
+      if (did === 'kick' || did === 'snare') notifyDrum(inst, did, s16, time, dpat);
     }
   }
 

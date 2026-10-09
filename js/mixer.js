@@ -4,37 +4,41 @@
 //   컴프레서 비율 1 = 꺼짐 — 노드를 거치지 않음 (지연 없음). (DynamicsCompressor는 자동 메이크업 게인이 있어 누를수록 커질 수 있음 — 출력 보정으로 맞춤)
 // 채널 게인 = 슬라이더(사용자, 100% = 프리셋 목표) × 프리셋 보정(트림 = 기준 + 상대값 − 측정 LUFS)
 //   측정: 헤드리스 Chrome에서 채널 출력 녹음 → ffmpeg ebur128 통합 라우드니스 (채널 100%, 2026-09-28)
-//   프리셋: 플랫(기본, 모든 채널 = 목소리와 같은 크기) / 권장(차등1) / 목소리 강조(차등2) — 목소리 대비 상대값 + 마스터 게인
+//   프리셋: 반주 크게(모든 채널 = 목소리와 같은 크기) / 균형(기본, 차등1) / 목소리 크게(차등2) — 목소리 대비 상대값 + 마스터 게인
 //   마스터 리미터: 넘칠 때만 누르는 안전장치 — AudioWorklet 룩어헤드 리미터(js/limiter-worklet.js, 트루 피크 -1 dBTP 이하, 5ms 지연)
 //     모듈 로드 전에는 마스터 → 출력 직결, 준비되면 사이에 끼운다. DynamicsCompressorNode는 자동 메이크업 게인이 있어 쓰지 않음
-// 설정 탭(#mixerPresets, #mixerRows)에서 프리셋·채널별 볼륨·음소거, localStorage 저장 (기기별)
+// 설정 탭: 사운드 밸런스(#mixerPresets — 프리셋) / 볼륨 믹서(#mixerRows — 채널별 볼륨·음소거), localStorage 저장 (기기별)
+//   모양: 마스터 = 전체 (가로 한 줄: 이름 · 수치) / 나머지 = 세부 (세로 슬라이더를 나란히 — 위가 100, 아래가 0: 이름 / 슬라이더 / 수치)
+//   켬·끔 = 수치를 누른다 (켜짐 = 켜짐의 톤, 꺼짐 = 흐리게) — 마스터도 같다
 // 믹서 밖: 녹음 카운트인 클릭(recorder.js)·지연 측정음(calib.js) — 녹음 도구 내부용, 볼륨이 측정에 영향 주지 않게
 (function() {
   const M = window.Moai;
   const KEY = 'moai.mixer2';   // v2: 프리셋 도입 (이전 'moai.mixer'의 슬라이더 값은 트림과 겹치므로 쓰지 않음)
   const CHANNELS = [
+    // name = 이름 (마스터 줄 · 설명), short = 세로 슬라이더 위의 짧은 이름 (칸이 좁다 — 두 글자 안팎)
     { id: 'master', name: '마스터' },
-    { id: 'moai',   name: '모아이 목소리' },
-    { id: 'npc',    name: 'NPC 목소리' },
-    { id: 'metro',  name: '메트로놈' },
-    { id: 'bgm',    name: 'BGM' },
-    { id: 'sample', name: '샘플 재생' },
-    { id: 'sfx',    name: '효과음' },   // 칩튠 효과음 (js/sfx.js — 아직 측정 전: 보정 0 dB, 소리마다 작게 합성)
+    { id: 'moai',   name: '내 목소리',   short: '나' },
+    { id: 'npc',    name: '상대 목소리', short: '상대' },   // 세션의 미니 모아이 · 필드 안내 목소리
+    { id: 'bgm',    name: 'BGM',         short: 'BGM' },
+    { id: 'sample', name: '녹음 듣기',   short: '녹음' },   // 녹음 탭에서 듣는 소리
+    { id: 'sfx',    name: '효과음',      short: '효과' },   // 칩튠 효과음 (js/sfx.js — 아직 측정 전: 보정 0 dB, 소리마다 작게 합성)
   ];
   // 채널 100%일 때 측정 라우드니스 (LUFS). BGM은 곡별로 -20에 맞춘 뒤(js/bgm.js) 채널에 들어온다
   //   moai = 목소리 기준 — 소리마다 순간 최대 -14 LUFS로 맞춰 들어온다(js/original.js) → 보정 0 dB
   //   sample = 녹음본 미리듣기, 보정 0 dB
-  const MEASURED = { npc: -17.1, metro: -24.3, bgm: -20 };
+  const MEASURED = { npc: -17.1, bgm: -20 };
   // 기준(앵커) = 목소리: 음량 맞춤을 거친 모아이 목소리의 AUTO 연주 통합 라우드니스 (TAP1 -12.8 · MIX1 -13.2 · DOO1 -13.3 평균)
   const ANCHOR_LUFS = -13.1;
   // 프리셋 = 목소리 대비 채널별 상대값 (dB) + 마스터 게인 (dB, 대표 상황의 믹스 전체를 -16 LUFS로)
   //   대표 상황 = 핑퐁 세션 (NPC 발신 + 모아이 응답 + 메트로놈). 마스터 0일 때 측정 플랫 -13.2 · 권장 -14.3 · 목소리 강조 -15.1 LUFS
+  //   이름 = 반주(상대 목소리 · BGM)가 목소리보다 얼마나 물러나나 — 차례도 그 순서 (반주 큼 → 목소리 큼)
+  //   마스터 게인은 메트로놈이 있던 때의 측정값 (메트로놈을 걷어낸 뒤 다시 재지 않음 — 다시 잴 때 tools/audio-capture.py)
   const PRESETS = [
-    { id: 'flat',  name: '플랫',        offset: { npc: 0,  metro: 0,   bgm: 0 },  master: -2.8 },
-    { id: 'rec',   name: '권장',        offset: { npc: -1, metro: -8,  bgm: -4 }, master: -1.7 },
-    { id: 'voice', name: '목소리 강조', offset: { npc: -3, metro: -11, bgm: -7 }, master: -0.9 },
+    { id: 'flat',  name: '반주 크게',   offset: { npc: 0,  bgm: 0 },  master: -2.8 },
+    { id: 'rec',   name: '균형',        offset: { npc: -1, bgm: -4 }, master: -1.7 },
+    { id: 'voice', name: '목소리 크게', offset: { npc: -3, bgm: -7 }, master: -0.9 },
   ];
-  const DEFAULT_PRESET = 'flat';
+  const DEFAULT_PRESET = 'rec';
 
   const state = {};            // id → { vol 0~1, mute }
   let preset = DEFAULT_PRESET;
@@ -62,11 +66,12 @@
   //   setTargetAtTime은 쓰지 않는다 — Chrome은 노드가 소리를 처리하는 동안에만 목표 추종을 진행해서,
   //   조용할 때 바꾼 값이 다음 소리 첫머리에서야 옛 값부터 따라가며 새어 나온다 (음소거한 채널에서 떽 첫머리 0.34 검출)
   //   선형 램프는 시각의 함수라 노드가 쉬고 있어도 15ms 뒤에는 목표값이다
-  M.rampGain = function(param, target) {
+  //   sec = 램프 길이 (생략 = 15ms — 조작에 바로 따라오는 길이. 잠깐 내리기처럼 들리게 바꿀 때는 길게)
+  M.rampGain = function(param, target, sec) {
     const now = param.context ? param.context.currentTime : M.ensureCtx().currentTime;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(target, now + 0.015);
+    param.linearRampToValueAtTime(target, now + (sec > 0 ? sec : 0.015));
   };
 
   // ── 음색 보정 값 ──
@@ -105,7 +110,10 @@
 
   // ── 오디오 그래프 (AudioContext가 생길 때 한 번 구성) ──
   let nodes = null, graphCtx = null, chains = null;
-  function level(id) { return state[id].mute ? 0 : state[id].vol * Math.pow(10, trimDb(id) / 20); }
+  // 잠깐 내리기 (duck): 그 채널을 소리 없이 — 슬라이더 · 음소거와 별개 (저장하지 않음). 소리만 내릴 뿐 곡 · 시계는 그대로 흐른다
+  //   쓰는 쪽: recorder-bridge.js (녹음 탭에서 듣는 동안 · 녹음하는 동안)
+  const ducked = {};           // id → true
+  function level(id) { return (state[id].mute || ducked[id]) ? 0 : state[id].vol * Math.pow(10, trimDb(id) / 20); }
   function build() {
     const ctx = M.ensureCtx();
     if (nodes && graphCtx === ctx) return;
@@ -165,6 +173,14 @@
       CHANNELS.forEach(function(c) { apply(c.id); });
       try { localStorage.removeItem(KEY); } catch (e) {}
     },
+    // 잠깐 내리기: ids 채널을 sec초에 걸쳐 내리거나(on) 되돌린다
+    duck: function(ids, on, sec) {
+      ids.forEach(function(id) {
+        if (!state[id] || !!ducked[id] === !!on) return;
+        if (on) ducked[id] = true; else delete ducked[id];
+        if (nodes) M.rampGain(nodes[id].gain, level(id), sec);
+      });
+    },
     PRESETS: PRESETS,
     getPreset: function() { return preset; },
     setPreset: function(id) {
@@ -185,38 +201,43 @@
   const rows = document.getElementById('mixerRows');
   const presetBox = document.getElementById('mixerPresets');
   if (!rows) return;
-  function renderPresets() {
-    if (!presetBox) return;
-    presetBox.innerHTML = PRESETS.map(function(p) {
-      return '<button class="beat-pattern-btn' + (p.id === preset ? ' active' : '') + '" data-preset="' + p.id + '" tabindex="-1">' + p.name + '</button>';
-    }).join('');
-  }
-  if (presetBox) {
-    let pTouched = false;
-    const pick = function(e) { const b = e.target.closest('[data-preset]'); if (b) { M.mixer.setPreset(b.getAttribute('data-preset')); renderPresets(); } };
-    presetBox.addEventListener('touchend', function(e) { if (!e.target.closest('[data-preset]')) return; e.preventDefault(); pTouched = true; pick(e); }, { passive: false });
-    presetBox.addEventListener('click', function(e) { if (pTouched) { pTouched = false; return; } pick(e); });
+  // 프리셋 = 값 넘기기 줄 (js/ui.js stepper — 순환)
+  const presetStep = M.ui && M.ui.stepper ? M.ui.stepper(presetBox, {
+    items: function() { return PRESETS; },
+    get: function() { return preset; },
+    set: function(id) { M.mixer.setPreset(id); },
+  }) : null;
+  function renderPresets() { if (presetStep) presetStep.render(); }
+  function numOf(c, st, pct) {           // 수치 = 켬·끔 버튼 (누르면 바뀜)
+    return '<button class="mixer-num" type="button" tabindex="-1" aria-pressed="' + !st.mute + '" aria-label="' + c.name + (st.mute ? ' 꺼짐' : ' 켜짐') + '">' + pct + '</button>';
   }
   function render() {
     renderPresets();
-    rows.innerHTML = CHANNELS.map(function(c) {
-      const s = state[c.id], pct = Math.round(s.vol * 100);
-      // [이름 값 ON/OFF] / [슬라이더]
-      return '<div class="mixer-row' + (s.mute ? ' muted' : '') + '" data-id="' + c.id + '">' +
-        '<div class="mixer-head"><label>' + c.name + '</label>' +
-        '<span class="mixer-val">' + pct + '</span>' +
-        '<button class="mixer-mute" tabindex="-1">' + (s.mute ? 'OFF' : 'ON') + '</button></div>' +
+    const master = CHANNELS.filter(function(c) { return c.id === 'master'; }), subs = CHANNELS.filter(function(c) { return c.id !== 'master'; });
+    rows.innerHTML = master.map(function(c) {
+      const st = state[c.id], pct = Math.round(st.vol * 100);
+      // 마스터: [이름 수치] / [가로 슬라이더]
+      return '<div class="mixer-row' + (st.mute ? ' muted' : '') + '" data-id="' + c.id + '">' +
+        '<div class="mixer-head"><label>' + c.name + '</label>' + numOf(c, st, pct) + '</div>' +
         '<input type="range" min="0" max="100" step="1" value="' + pct + '"></div>';
-    }).join('');
+    }).join('') + '<div class="mixer-chs">' + subs.map(function(c) {
+      const st = state[c.id], pct = Math.round(st.vol * 100);
+      // 세부 채널: 짧은 이름 / 세로 슬라이더 / 수치
+      return '<div class="mixer-row mixer-ch' + (st.mute ? ' muted' : '') + '" data-id="' + c.id + '" title="' + c.name + '">' +
+        '<label>' + (c.short || c.name) + '</label>' +
+        '<div class="vslider"><input type="range" min="0" max="100" step="1" value="' + pct + '" aria-label="' + c.name + '"></div>' +
+        numOf(c, st, pct) + '</div>';
+    }).join('') + '</div>';
   }
   rows.addEventListener('input', function(e) {
     const row = e.target.closest('.mixer-row');
     if (!row || e.target.type !== 'range') return;
     M.mixer.set(row.getAttribute('data-id'), e.target.value / 100);
-    row.querySelector('.mixer-val').textContent = e.target.value;
+    const val = row.querySelector('.mixer-num');
+    if (val) val.textContent = e.target.value;
   });
   function toggleMute(e) {
-    const btn = e.target.closest('.mixer-mute');
+    const btn = e.target.closest('.mixer-num');
     if (!btn) return;
     const id = btn.closest('.mixer-row').getAttribute('data-id');
     M.mixer.set(id, null, !state[id].mute);
@@ -224,7 +245,7 @@
   }
   let touched = false;
   rows.addEventListener('touchend', function(e) {
-    if (!e.target.closest('.mixer-mute')) return;
+    if (!e.target.closest('.mixer-num')) return;
     e.preventDefault(); touched = true; toggleMute(e);
   }, { passive: false });
   rows.addEventListener('click', function(e) { if (touched) { touched = false; return; } toggleMute(e); });

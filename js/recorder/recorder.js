@@ -3,8 +3,8 @@
 // file = 현재 게임 음성 (샘플 탭의 원본 파형·▶ 원본·▶ 비교 기준)
 var SAMPLES = [
   { name: 'doo',    file: 'assets/voice/doo.wav', label: 'Doo', role: '뚜~ (홀드 지속음)', loop: true,  dur: 1.1 },
-  { name: 'pah',    file: 'assets/voice/pah.wav', label: 'Pah', role: '떽! (숏 릴리즈)',    loop: false, dur: 0.5 },
   { name: 'wop',    file: 'assets/voice/wop.wav', label: 'Wop', role: '웡~ (롱 릴리즈)',    loop: false, dur: 0.3 },
+  { name: 'pah',    file: 'assets/voice/pah.wav', label: 'Pah', role: '떽! (숏 릴리즈)',    loop: false, dur: 0.5 },
 ];
 function sampleDur(name) {
   for (var i = 0; i < SAMPLES.length; i++) if (SAMPLES[i].name === name) return SAMPLES[i].dur;
@@ -29,8 +29,144 @@ var loopPoints = {};    // name → { start, end } (Doo만)
 var currentRecording = null;  // { name, mediaRecorder, chunks, analyser, animFrame }
 var activeSource = null;
 var activeSources = [];  // playBoth용 — stopActive에서 일괄 정리
+
+// 바쁨 알림 'moai:recorder' { busy } — 소리를 내고 있거나(듣기) 녹음에 들어갔을 때(마이크 대기 · 카운트인 · 녹음 중). 상태만 알린다
+//   해석은 듣는 쪽: recorder-bridge.js = 게임의 소리를 잠깐 내림
+//   시작은 그 자리에서 바로 알리고 (startRecording · playback.js startSource), 끝은 주기 확인이 잡는다 — 재생이 끝나는 길이 여럿이라 (끝까지 · 그만 듣기 · 다른 소리로 · 탭 이동)
+var BUSY_POLL_MS = 200;
+var recPending = false;  // 녹음하기를 누르고 마이크를 기다리는 사이
+var busyLast = false;
+function recorderBusy() { return !!(activeSource || currentRecording || recPending); }
+function announceBusy() {
+  var b = recorderBusy();
+  if (b === busyLast) return;
+  busyLast = b;
+  document.dispatchEvent(new CustomEvent('moai:recorder', { detail: { busy: b } }));
+}
+setInterval(announceBusy, BUSY_POLL_MS);
+// 세션이 시작하면 듣기 · 녹음을 멈춘다 — 세션 중에는 녹음 탭을 건드릴 수 없다 (탭 잠금은 main.js)
+document.addEventListener('moai:session', function(e) {
+  if (!e.detail || !e.detail.active) return;
+  if (typeof stopActive === 'function') stopActive();
+  if (currentRecording) stopRecording();
+});
 var recOffsets = {};     // name → offsetMs (탭별 시작 지점 보정)
 var activePlayBtn = null; // 현재 재생 중인 버튼 { id, origText }
+var adoptedTake = {};     // name → 채택(갱신)할 때의 녹음 (recBuffers의 그 객체) — 지금 녹음이 이미 반영된 것인지 가름
+var loopPreview = true;   // 루프 토글: 뚜~를 들을 때 루프 구간을 이어서 (끄면 한 번만) — 처음 켬
+
+// ========== 버튼 상태 (한 곳) ==========
+// 소리마다 두 칸: 녹음 칸(recBuffers — 방금 녹음한 것) · 채택(adoptedBuffers — 게임이 쓰는 내 소리)
+//   가운데 버튼: 녹음하기 → (녹음 중) 녹음 중지 → 들어보기 ↔ (듣는 중) 그만 듣기
+//   왼쪽 버튼:   채택 → (채택하면) 완료 → (새 녹음이 생기면) 갱신 → (갱신하면 · 다시로 버리면) 완료.  한 번 채택한 뒤로는 완료 ↔ 갱신
+//     완료 = 표시 (누르는 버튼이 아님 — 지금 게임이 내 소리를 쓰고 있다)
+//   오른쪽 버튼: 다시 (녹음 칸을 비워 녹음하기로 — 채택한 소리는 그대로) / 녹음 칸이 비었고 채택한 소리가 있으면 제거 (채택까지 지워 처음으로)
+//   묻기 (slotAsk): 왼쪽 · 오른쪽 버튼은 바로 하지 않고 한 번 더 묻는다 — 가운데가 "<누른 버튼 이름>할까요?" 말풍선, 아래 둘이 예 / 아니오
+function refreshSlot(name) {
+  var take = recBuffers[name], adopted = adoptedBuffers[name], pending = !!take && adoptedTake[name] !== take;
+  var recording = !!(currentRecording && currentRecording.name === name);
+  var listening = !!(activePlayBtn && activePlayBtn.id === 'btnRec-' + name);
+  var asking = slotAsk && slotAsk.name === name ? slotAsk : null;
+  var el = function(id) { return document.getElementById(id + '-' + name); };
+  var main = el('btnRec'), ad = el('btnAdopt'), redo = el('btnRedo'), loop = el('btnLoopSw'), both = el('btnBoth'), bake = el('btnBake'), off = el('offsetSlider');
+  if (main) {
+    main.textContent = asking ? asking.label + '할까요?' : recording ? '녹음 중지' : listening ? '그만 듣기' : take ? '들어보기' : '녹음하기';
+    main.classList.toggle('asking', !!asking);
+    main.classList.toggle('recording', recording);
+    main.classList.toggle('active', listening && !asking);
+  }
+  if (ad) {
+    ad.textContent = asking ? '예' : !adopted ? '채택' : pending ? '갱신' : '완료';
+    ad.disabled = !asking && !adopted && !take;
+    ad.classList.toggle('adopted', !asking && !!adopted && !pending);
+    ad.classList.toggle('ask-yes', !!asking);
+  }
+  if (redo) {
+    redo.textContent = asking ? '아니오' : !take && adopted ? '제거' : '다시';
+    redo.disabled = !asking && (recording || (!take && !adopted));
+    redo.classList.toggle('ask-no', !!asking);
+  }
+  if (loop) { loop.disabled = !isLoopSample(name); loop.classList.toggle('active', loopPreview && isLoopSample(name)); }
+  if (both) both.disabled = !take;
+  if (bake) bake.disabled = !adopted;
+  if (off) off.disabled = !take;
+  if (typeof updateTabBadges === 'function') updateTabBadges();   // 소리 탭의 표시(● · ✓)도 같은 상태에서
+}
+// 가운데 버튼: 녹음 중이면 중지, 녹음이 있으면 듣기(다시 누르면 그만), 없으면 녹음 시작
+function slotMain(name) {
+  if (currentRecording) { if (currentRecording.name === name) stopRecording(); return; }
+  if (recBuffers[name]) { playRecorded(name); return; }
+  stopActive();                        // 샘플을 듣던 중이면 멈추고 녹음으로
+  toggleRecord(name);
+}
+// 루프 토글 (소리 셋이 함께 쓰는 값 하나) — 바꾸면 듣던 것은 멈춘다 (다음 재생부터)
+function toggleLoopPreview() {
+  loopPreview = !loopPreview;
+  stopActive();
+  SAMPLES.forEach(function(s) { refreshSlot(s.name); });
+}
+// ── 묻기: 갱신 · 다시 · 제거는 한 번 더 묻고 한다 (실수 방지). 첫 채택은 바로 ──
+//   묻는 동안: 듣던 소리는 멈추고(깔끔한 상태에서 고르게), 예 / 아니오 말고는 아무것도 누를 수 없다 (입력 관문 gate.js)
+//   같은 자리를 잇달아 두 번 누른 것이 곧바로 '예'가 되지 않게, 묻기 시작한 뒤 ASK.guardMs 동안의 답은 받지 않는다
+var slotAsk = null;            // { name, act: 'adopt' | 'redo' | 'clear', label, since }
+var ASK = { guardMs: 300 };
+function askSlot(name, act, label) {
+  if (currentRecording || slotAsk) return;
+  stopActive();
+  slotAsk = { name: name, act: act, label: label, since: Date.now() };
+  var gate = window.Moai && window.Moai.gate;
+  if (gate) {
+    var yes = document.getElementById('btnAdopt-' + name), no = document.getElementById('btnRedo-' + name);
+    gate.lock('ask', { allow: function(t) { return !!t && ((yes && yes.contains(t)) || (no && no.contains(t))); } });
+  }
+  refreshSlot(name);
+}
+function answerSlot(yes) {
+  var a = slotAsk;
+  if (!a || Date.now() - a.since < ASK.guardMs) return;
+  slotAsk = null;
+  if (window.Moai && window.Moai.gate) window.Moai.gate.unlock('ask');
+  if (yes) { if (a.act === 'adopt') adopt(a.name); else if (a.act === 'redo') redoTake(a.name); else if (a.act === 'clear') clearAdopted(a.name); }
+  refreshSlot(a.name);
+}
+// 왼쪽 버튼 (채택 · 갱신 / 묻는 중엔 예) · 오른쪽 버튼 (다시 · 제거 / 묻는 중엔 아니오)
+function slotLeft(name) {
+  if (slotAsk) { if (slotAsk.name === name) answerSlot(true); return; }
+  var take = recBuffers[name];
+  if (!take || adoptedTake[name] === take) return;            // 녹음이 없거나 이미 반영함 (완료)
+  if (!adoptedBuffers[name]) { adopt(name); return; }         // 첫 채택은 묻지 않는다 (잃을 것이 없음 — 갱신부터 물음)
+  askSlot(name, 'adopt', '갱신');
+}
+function slotRight(name) {
+  if (slotAsk) { if (slotAsk.name === name) answerSlot(false); return; }
+  if (recBuffers[name]) askSlot(name, 'redo', '다시');
+  else if (adoptedBuffers[name]) askSlot(name, 'clear', '제거');
+}
+// 제거: 채택해 둔 소리까지 지워 처음으로 — 게임 목소리가 샘플(기본 소리)로 돌아간다 (녹음 칸이 비어 있을 때만 나오는 버튼)
+function clearAdopted(name) {
+  delete adoptedBuffers[name]; delete adoptedTake[name];
+  setSlotStatus(name, '');
+  refreshSlot(name);
+  if (window.Moai && window.Moai.originalUpdateStatus) window.Moai.originalUpdateStatus();
+}
+// 다시: 녹음 칸을 비운다 — 채택해 둔 소리는 그대로. 가운데 버튼이 녹음하기로, 파형은 샘플만
+function redoTake(name) {
+  if (currentRecording || !recBuffers[name]) return;
+  stopActive();
+  delete recBuffers[name]; delete recRawBuffers[name]; delete loopPoints[name];
+  recOffsets[name] = 0;
+  var cv = document.getElementById('cvRec-' + name);
+  if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  var off = document.getElementById('offsetSlider-' + name);
+  if (off) off.value = 0;
+  document.getElementById('offsetLabel-' + name).textContent = '0ms';
+  var sample = SAMPLES.filter(function(s) { return s.name === name; })[0];
+  document.getElementById('loopInfo-' + name).textContent = '';
+  drawSampleWave(sample);
+  setSlotStatus(name, '');
+  refreshSlot(name);
+  updateTabBadges();
+}
 
 // ========== Audio Init ==========
 function initAudio() {
@@ -174,7 +310,7 @@ function redrawWithOffset(name, skipLoopAnalysis) {
     var xfLoopEnd = (endSample - fadeSamples) / sr;
     loopPoints[name] = { start: loopResult.loopStart, end: loopResult.loopEnd, xfEnd: xfLoopEnd, peaks: loopResult.peaks };
     var infoEl = document.getElementById('loopInfo-' + name);
-    infoEl.textContent = '루프: ' + loopResult.loopStart.toFixed(3) + 's → ' + xfLoopEnd.toFixed(3) + 's (XF ' + fadeMs + 'ms) | sim=' + loopResult.debug.maxSim.toFixed(3);
+    setLoopDevInfo(name, '내 녹음 ' + loopResult.loopStart.toFixed(2) + '~' + xfLoopEnd.toFixed(2) + ' · XF ' + fadeMs + 'ms · sim=' + loopResult.debug.maxSim.toFixed(3));
   }
 
   // 루프 포인트 표시 (컷 버퍼 기준, 캔버스에는 오프셋 더해서 렌더)
@@ -192,9 +328,6 @@ function redrawWithOffset(name, skipLoopAnalysis) {
     ctxRec.moveTo(lsX, 0);
     ctxRec.lineTo(lsX, cvH);
     ctxRec.stroke();
-    ctxRec.fillStyle = '#4caf50';
-    ctxRec.font = 'bold 11px sans-serif';
-    ctxRec.fillText('S', lsX + 3, 12);
     // loopEnd 마커 (빨강)
     ctxRec.strokeStyle = '#f44336';
     ctxRec.lineWidth = 2;
@@ -202,15 +335,14 @@ function redrawWithOffset(name, skipLoopAnalysis) {
     ctxRec.moveTo(leX, 0);
     ctxRec.lineTo(leX, cvH);
     ctxRec.stroke();
-    ctxRec.fillStyle = '#f44336';
-    ctxRec.font = 'bold 11px sans-serif';
-    ctxRec.fillText('E', leX + 3, 12);
+    setLoopLabels(name, lsX / cvW, leX / cvW);   // 선 옆 이름표 (시작 · 끝) — 내 녹음의 루프 자리로
   }
 
   // 상태 갱신
   var cutInfo = (copyLen / sr).toFixed(3) + 's';
   if (offsetMs > 0) cutInfo += ' (보정 ' + offsetMs + 'ms)';
-  setSlotStatus(name, '녹음 완료 (' + cutInfo + ')');
+  setSlotStatus(name, recDev() ? '녹음 완료 (' + cutInfo + ')' : '');   // 길이 수치는 개발 공간에서만
+  refreshSlot(name);                    // 오프셋을 옮기면 녹음 칸의 소리가 새로 잘린다 → 채택 버튼이 갱신으로
 }
 
 // ========== Recording ==========
@@ -261,10 +393,12 @@ function startRecording(name) {
   setSlotStatus(name, '마이크 접근 중...');
   var btnRec = document.getElementById('btnRec-' + name);
   lockForRecording(name);
+  recPending = true; announceBusy();             // 마이크가 열리기 전에 게임의 소리부터 내린다
 
   navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false }
   }).then(function(stream) {
+    recPending = false;                          // 이 아래에서 바로 currentRecording이 서거나 (바쁨 유지) 취소된다
     if (!sampleVisible) {                        // 마이크 허용을 기다리는 사이 탭을 벗어남 → 시작하지 않음
       stream.getTracks().forEach(function(t) { t.stop(); });
       setSlotStatus(name, '녹음 취소');
@@ -310,8 +444,7 @@ function startRecording(name) {
         if (currentRecording.countFrame) cancelAnimationFrame(currentRecording.countFrame);
       }
       currentRecording = null;
-      btnRec.classList.remove('recording');
-      btnRec.textContent = '🎙 녹음';
+      refreshSlot(name);
       // 카운트 바 정적 복원
       drawCountBarStatic(document.getElementById('cvCount-' + name));
     };
@@ -321,8 +454,7 @@ function startRecording(name) {
     var ctxRec = cvRec.getContext('2d');
     ctxRec.clearRect(0, 0, cvRec.width, cvRec.height);
 
-    btnRec.classList.add('recording');
-    btnRec.textContent = '⏹ 중지';
+    refreshSlot(name);                  // 녹음 중지
 
     // 카운트인 시작 — 카운트 바에서 진행
     var cvCount = document.getElementById('cvCount-' + name);
@@ -356,6 +488,7 @@ function startRecording(name) {
 
   }).catch(function(err) {
     setSlotStatus(name, '마이크 접근 실패: ' + err.message);
+    recPending = false;
     currentRecording = null;
     unlockRecording();
   });
@@ -376,14 +509,10 @@ function stopRecording() {
       micStream = null;
     }
     if (rec.micSource) rec.micSource.disconnect();
-    var btnRec = document.getElementById('btnRec-' + rec.name);
-    if (btnRec) {
-      btnRec.classList.remove('recording');
-      btnRec.textContent = '🎙 녹음';
-    }
     drawCountBarStatic(document.getElementById('cvCount-' + rec.name));
     setSlotStatus(rec.name, '녹음 취소');
     currentRecording = null;
+    refreshSlot(rec.name);
     unlockRecording();
   }
 }
@@ -425,12 +554,7 @@ function processRecording(name, chunks) {
       // 파형 그리기 (오프셋 0 상태 — 컷 + 루프 분석도 여기서 수행)
       redrawWithOffset(name);
 
-      document.getElementById('btnPlay-' + name).disabled = false;
-      var btnBoth = document.getElementById('btnBoth-' + name);   // 원본이 있을 때만 존재
-      if (btnBoth) btnBoth.disabled = false;
-      var btnLoop = document.getElementById('btnLoop-' + name);
-      if (btnLoop) btnLoop.disabled = false;
-      document.getElementById('btnAdopt-' + name).disabled = false;
+      refreshSlot(name);               // 들어보기 · 채택(갱신) · 다시
       updateTabBadges();
 
     }).catch(function(err) {
@@ -440,9 +564,9 @@ function processRecording(name, chunks) {
   reader.readAsArrayBuffer(blob);
 }
 
-function adopt(name) {
+function adopt(name) {                 // 채택 · 갱신: 녹음 칸의 소리를 게임 목소리로
   var buf = recBuffers[name];
-  if (!buf) return;
+  if (!buf || adoptedTake[name] === buf) return;   // 녹음이 없거나 이미 반영한 녹음 (완료)
 
   var sample = SAMPLES.filter(function(s) { return s.name === name; })[0];
 
@@ -463,29 +587,22 @@ function adopt(name) {
     if (xfBuf) {
       adoptedBuffers[name] = xfBuf;
       var infoEl = document.getElementById('loopInfo-' + name);
-      infoEl.textContent = '루프: ' + result.loopStart.toFixed(4) + 's → ' +
-        xfBuf._loopEnd.toFixed(4) + 's (XF ' + fadeMs + 'ms)';
-      if (result.peaks.length > 0) {
-        var best = result.peaks[result.peaks.length - 1];
-        infoEl.textContent += ' | sim=' + best.height.toFixed(3);
-      }
+      var best = result.peaks && result.peaks.length > 0 ? result.peaks[result.peaks.length - 1] : null;
+      setLoopDevInfo(name, '내 녹음 ' + result.loopStart.toFixed(2) + '~' + result.loopEnd.toFixed(2) + (best ? ' · sim=' + best.height.toFixed(3) : ''));
     } else {
       adoptedBuffers[name] = buf;
-      document.getElementById('loopInfo-' + name).textContent = '루프: XF 실패, 원본 사용';
+      document.getElementById('loopInfo-' + name).textContent = '반복 구간을 잇지 못함 — 녹음 그대로 사용';
     }
   } else {
     adoptedBuffers[name] = buf;
   }
 
-  setSlotStatus(name, '✅ 채택됨');
-  var btnAdopt = document.getElementById('btnAdopt-' + name);
-  btnAdopt.classList.add('adopted');
-  btnAdopt.textContent = '✅ 채택됨';
-  var btnBake = document.getElementById('btnBake-' + name);   // 게임 목소리 파일로 굽기 (recorder/bake.js)
-  if (btnBake) btnBake.disabled = false;
+  adoptedTake[name] = buf;
+  setSlotStatus(name, '');
+  refreshSlot(name);                   // 완료 (굽기 — 개발 공간 — 도 켜짐)
 
   updateTabBadges();
-  // 조작 탭 원본 모드 상태 갱신
+  // 쓰는 소리 표시 갱신 (개발 탭의 목소리 줄 — js/original.js)
   if (window.Moai && window.Moai.originalUpdateStatus) window.Moai.originalUpdateStatus();
 }
 

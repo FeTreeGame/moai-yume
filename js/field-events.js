@@ -1,6 +1,8 @@
 // 필드 사건 → 동작 연결표 — 인스턴스(field-actors.js)는 알리기만 하고, 무엇을 할지는 여기 한 곳에서 정한다 (구조 로드맵 F-2)
 //   키 = '사건:종류' (예: 'tap:sprout'), 값 = function(detail). 없는 조합은 아무 일도 없다 (알림만 남음)
 //   지금: 새싹·미니 모아이 누름 → 그 계열 핑퐁으로 진입. 풍선은 보상 없음 (가끔의 재미 — 붙이려면 'pop:balloon' / 'land:balloon')
+//   획득 경로 (보상 카드를 준다 — 이미 받았으면 아무 일도 없다): 새가 메인 모아이 위에 떨어짐 → 치장의 새 / 완수 왕관을 누름 → 치장의 왕관 /
+//     배경 요소를 누름 → 그 요소에 적힌 카드 (데이터 파일 scenery 항목의 tap — 새싹 → coco)
 //   게이지(field-gauge.js): 바가 생김('appear') · 다 채움('full') — 홀드 미션(입력원 'hold')이면 누르던 입력을 뗀 것처럼 놓음 (input.js M.releaseInput — 엉,
 //     이후 실제 손 떼기는 무시 → 다시 누르려면 떼고 새로). 패턴 미션(루프 성공)은 입력을 그대로 둔다
 //     무엇을 보상하나(BGM 파트·미니 모아이 …)는 진행 표가 정한다 (js/field-progress.js — 단계마다 카드)
@@ -14,7 +16,22 @@
   function releaseIfHold(d) { if (d.source === 'hold' && M.releaseInput) M.releaseInput(); }   // 홀드 미션이 다 참 → 그 홀드는 끝 (엉)
   function enterStage(d) { if (d.stage && M.session && M.session.enter) M.session.enter(d.stage, 'pingpong'); }
 
+  // 보상 카드를 주고 알린다 ('reward', actor 'field' — 효과음 · 연출, 꾸미기 탭의 칸)
+  function gain(id) {
+    if (!id || !M.rewards || !M.rewards.give(id, { fade: true })) return;
+    document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'reward', actor: 'field', card: id } }));
+  }
   const RULES = {
+    'perch:balloon': function() { gain('acc.bird'); },
+    'tap:crown': function() { gain('acc.crown'); },
+    'tap:scenery': function(d) {
+      if (d.id === 'gugu') {                 // 구구 = 만든 세션의 NPC (제작 탭 — js/custom-session.js): 단계가 있으면 그 세션으로, 없으면 몸짓만
+        if (!(M.customSession && M.customSession.play())) document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'idle', actor: 'gugu', x: d.x, y: d.y } }));
+        return;
+      }
+      const it = M.scenery ? M.scenery.items().filter(function(x) { return x.id === d.id; })[0] : null;
+      if (it) gain(it.tap);
+    },
     'tap:sprout': function(d) { enterStage(d); },
     'tap:mini': function(d) { enterStage(d); },
     'appear:gauge': function(d) { releaseIfHold(d); },

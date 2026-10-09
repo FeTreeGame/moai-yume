@@ -1,7 +1,7 @@
 // 진행 표 — 게이지 단계마다 달성 조건과 보상을 카드로 (구상: docs/STRUCTURE-ROADMAP.md F-5, 명세: docs/index/field-gauge.md)
 //   게이지(field-gauge.js)는 그릇: 지금 단계 조건의 양으로 차고, 다 차면 알린다 ('appear' | 'full')
 //   여기서: 알림을 받아 지금 단계의 보상 카드를 주고, 단계가 끝나면 다음 단계로 넘기며 그 단계의 조건(양)을 게이지에 건다
-//   단계 칸: condition = { card | pool, need, patterns? } · reward = 카드 id | { card | pool, else? } · bonus (선택, 같은 형식) · repeat = 횟수 | 'untilEmpty'
+//   단계 칸: condition = { card | pool, need, patterns? } · reward = 카드 id | { card | pool, else? } · bonus (선택, 같은 형식 — 여럿이면 목록 [칸, 칸…]) · repeat = 횟수 | 'untilEmpty'
 //     pool = 그 단계에 도달했을 때 can()이 참인 후보 중 하나를 뽑는다 ("이번에는 이 중 하나" — 다음 것을 미리 정하지 않음)
 //     else = 그 카드(들)를 줄 수 없을 때 대신 줄 것 (같은 형식 — 예: 파트가 밀려나 남지 않았으면 'none')
 //     patterns = 그 단계의 필드 평가 패턴 (PATTERNS 이름 목록 — 하나면 그 패턴만 루프마다 반복). 없으면 조건 카드의 기본 목록
@@ -17,7 +17,7 @@
 //   알림: document 'moai:field-event' { kind: 'reward', actor: 'progress', card, level } — 효과음·연출을 붙일 자리
 //   게이지 미션을 받는 상태 (receiving — 처음 켜짐): 꺼진 동안 게이지는 숨고 채우지 않으며 필드 평가도 끔. 단계·받은 보상 수는 그대로
 //     다시 켜면 그 단계의 채움은 처음부터 (게이지가 알림을 듣고 비움). 알림: { kind: 'receive', actor: 'progress', on }
-//     바꾸는 쪽: 연결표 js/field-events.js (BGM 정지·재생, 세션 시작·끝에 붙인 역할) · 조작 탭 버튼 (#missionToggle · M 키 — 시험용 순수 전환)
+//     바꾸는 쪽: 연결표 js/field-events.js (BGM 정지·재생, 세션 시작·끝에 붙인 역할) · 개발 탭 버튼 (#missionToggle · M 키 — 시험용 순수 전환, 개발 공간 ?dev 에서만)
 (function() {
   const M = window.Moai;
 
@@ -146,7 +146,7 @@
     toggleBtn.addEventListener('click', function() { if (touched) { touched = false; return; } toggleReceiving(); });
   }
   document.addEventListener('keydown', function(e) {
-    if (e.repeat || e.code !== 'KeyM') return;
+    if (!M.dev || e.repeat || e.code !== 'KeyM') return;   // 시험용 전환 — 개발 공간(?dev)에서만
     e.preventDefault(); toggleReceiving();
   });
   function advance() {                  // 끝난 단계는 지나감 (줄 것이 없는 단계 포함)
@@ -155,7 +155,7 @@
   function award() {
     const L = LEVELS[level];
     if (!L) return;
-    [L.reward, L.bonus].forEach(function(spec) {
+    [L.reward].concat(L.bonus).forEach(function(spec) {   // bonus가 목록이면 하나씩
       const id = pick(spec);
       if (!id) return;
       REWARDS[id].give();
@@ -184,7 +184,7 @@
   M.fieldProgress = {
     state: function() { const L = LEVELS[level]; return { level: level, given: given, reward: L ? ids(L.reward) : null, condition: condition ? condition.name : null, done: !L, receiving: receiving }; },
     receiving: function() { return receiving; },
-    setReceiving: setReceiving,        // 게이지 미션을 받는 상태 켜고 끄기 (연결표의 역할 · 조작 탭 버튼)
+    setReceiving: setReceiving,        // 게이지 미션을 받는 상태 켜고 끄기 (연결표의 역할 · 개발 탭 버튼)
     toggleReceiving: toggleReceiving,
     goto: function(i) { enter(i); },   // 시험용 — 그 단계로 바로
     rewards: REWARDS, conditions: CONDITIONS, levels: LEVELS, patterns: PATTERNS, rest: REST,   // 카드·단계 표·패턴·쉼 (조정·시험용)

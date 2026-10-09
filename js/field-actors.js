@@ -24,10 +24,10 @@
 //       (이어서 세션 시작에 따라 하한으로). 세션 중엔 끔 (NPC 몸·하한). 시험 장치로 미니 모아이에 빙의 중이면 끔 (그 몸만 움직임)
 //     세션이 시작되면(진입 대기부터) 그 계열이 아닌 미니 모아이는 높이를 하한(0)까지 내리고, 끝나면 들어가기 전 높이로 (MINI.session)
 //       — 플레이어가 ↓로 하는 것과 같은 높이 조작. 오르내리는 속도는 하나 (MINI.move — 세션 대기·세우기 공용)
-//   새싹: 핑퐁 계열 하나에 대응. 순서·색 = 조작 탭 스테이지 행 순서(M.session.families — 쉬운 것부터) × 무지개 보라~빨강
+//   새싹: 핑퐁 계열 하나에 대응. 순서·색 = 스테이지 행 순서(개발 탭의 스테이지 단계 — M.session.families — 쉬운 것부터) × 무지개 보라~빨강
 //         (굴러조개 TAP 보라 … 마실태양 CPD 빨강 — 종착지 무지개와의 매칭, 난이도 표시)
 //         세우기: raise(계열) — 그 계열 영역(layout.js M.seedZones() — 계열마다 한 곳, 좌우 대칭 고리) 가운데에 새싹을 세운다 ('sprout' 알림).
-//           부르는 쪽 = 이후 사건 (예정: 게이지). 지금은 부르는 곳 없음 — 필드 입구는 비어 있고 스테이지는 서랍 조작 탭으로
+//           부르는 쪽 = 이후 사건 (예정: 게이지). 지금은 부르는 곳 없음 — 필드 입구는 비어 있고 스테이지 바로 시작은 서랍 개발 탭으로
 //         세울 순서 (nextStage): 앞 계열의 새싹이 세워지고 그 새싹과 상호작용(누름 = 스테이지 경험)해야 다음 계열이 열린다. 클리어 순서는 자유
 //         영역 표시는 ZONE.show (지금 = 안 보임 — 미니 모아이가 자리를 보여 줌. 'always'면 계열 색 원)
 //         누르면 'tap' → 그 스테이지로 진입(연결표).
@@ -55,8 +55,9 @@
     banner:  Object.assign({}, FLOAT, { interact: 'none', motion: 'float', session: 'keep',
       look: { label: '환영합니다', fill: 'rgba(255,244,194,0.9)' }, w: 0.18, aspect: 0.28, z: [1.5], band: [0.07, 0.14], speed: 0.018, period: 18 }),
     // 즉각 보상형: 풍선에 매달린 것 — 터뜨려 필드로 떨군다 (임시 에셋 bird-1). 보상은 지금 없음 (붙이려면 연결표에서)
-    balloon: Object.assign({}, FLOAT, { interact: 'instant', motion: 'float', onTap: 'drop', onLand: 'fade', session: 'remove',
-      look: { img: 'assets/bird-1.png', faceRight: true }, w: 0.12, aspect: 1, z: [1.5, 5.5] }),
+    //   perch = 보상 카드: 터뜨린 자리가 메인 모아이 판정 상자의 가로 구간 안이고 그 카드를 아직 줄 수 있으면 '안착' — 떨어지며 서서히 사라지고 'perch'를 알린다 (새 그림 → 치장의 새. 연결표)
+    balloon: Object.assign({}, FLOAT, { interact: 'instant', motion: 'float', onTap: 'drop', onLand: 'fade', session: 'remove', perch: 'acc.bird',
+      look: { img: 'assets/bird-1.webp', faceRight: true }, w: 0.12, aspect: 1, z: [1.5, 5.5] }),
     // 새싹: 성장 단계별 모습 (looks[도달 단계] — 0 = 발아, 1·2 = 성장, 완수 단계는 bloom). 자리 표시 — 에셋 예정
     sprout:  { interact: 'deferred', motion: 'ground', onTap: 'emit', session: 'keep', w: 0.06, z: 6.5,
       looks: [
@@ -66,7 +67,7 @@
       ] },
     // 미니 모아이: 메인 모아이 에셋(프레임) + 계열 색. 심도 = 영역 원(6.2) 위, 앞쪽(아래) 영역일수록 앞
     mini:    { interact: 'deferred', motion: 'ground', onTap: 'emit', session: 'keep', z: 6.3, aspect: 1920 / 1080, mask: miniMask, hit: 'moai',   // hit = 모아이 판정 사각형 (layout.js M.MOAI_HIT)   // 자리·크기·마스크 = MINI. 누르면 'tap' → 그 계열 진입 (연결표)
-      look: { img: 'assets/idle.png', frames: true, faceRight: true, tint: true } },   // frames = 모아이 프레임 10장 (애니메이터가 고름)
+      look: { img: 'assets/idle.webp', frames: true, faceRight: true, tint: true } },   // frames = 모아이 프레임 10장 (애니메이터가 고름)
   };
   // 등장: 첫 등장(초 — 등장을 켠 때부터), 다음 등장까지 간격(초, 무작위 — 등장마다), 떠다니는 것의 동시 수, 뽑기 가중치
   //   등장을 켜고 끄는 것은 밖에서 (spawning(on) — 언제부터 나올지는 연결표 js/field-events.js). 끄면 새로 나오지 않을 뿐, 떠 있는 것은 그대로 지나감
@@ -79,9 +80,20 @@
   const DROP = { gravity: 0.9, linger: 1.5, fade: 0.5, z: 6.5, depth: 0.05, captionLinger: 2.5 };   // captionLinger = 자막이 있으면 머묾(초)
   // 성장: 이 모드의 결과로만 자람, 완수 단계(핑퐁 계열 단계 수), 완수 뒤 사라짐(초)
   const GROW = { modes: ['pingpong'], full: 3, bloomFade: 0.8 };
-  const MINI_STAR = { v: 0.81, size: 0.05, gap: 0.004, rise: 0.04, shiftX: 0.01, fade: 0.5 };
+  // 완수 별: 자리 = 모아이 상자 안의 한 점 (u·v — 상자 폭·높이 비, 에셋 기준: 오른쪽을 보는 그림에서 u 0 = 등 쪽 끝). 반전·회전은 상자를 따름
+  //   (layout.js M.quadOn — 판정 사각형·악세사리 js/accessories.js와 같은 기준). size·gap·rise = 캔버스 높이 비
+  const MINI_STAR = { u: 0.083, v: 0.81, size: 0.05, gap: 0.004, rise: 0.04, fade: 0.5 };
   const crownHud = document.getElementById('completionCrowns');
   let crownPreview = false;
+  // 완수 왕관(양 구석 — 어느 것이든)을 누르면 알린다 ('tap', actor 'crown' — 왕관 치장: 연결표). 캔버스와 다른 층이라 일반 누름, 연주 입력으로 새지 않게 막는다
+  if (crownHud) {
+    ['mousedown', 'touchstart', 'pointerdown'].forEach(function(t) { crownHud.addEventListener(t, function(e) { if (e.target.closest('.completion-crown')) e.stopPropagation(); }); });
+    crownHud.addEventListener('click', function(e) {
+      if (!e.target.closest('.completion-crown')) return;
+      e.stopPropagation();
+      document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'tap', actor: 'crown' } }));
+    });
+  }
   let allClearAnnounced = false;
   function allMiniComplete() {
     const families = M.session && M.session.families ? M.session.families() : [];
@@ -92,7 +104,7 @@
   function updateCrownHud() {
     if (!crownHud) return;
     const complete = allMiniComplete();
-    crownHud.classList.toggle('hidden', !complete && !crownPreview);
+    crownHud.classList.toggle('hidden', (!complete && !crownPreview) || inSession());   // 세션 중에는 숨긴다 (바로 — 페이드 없이)
     if (complete && !allClearAnnounced) {
       allClearAnnounced = true;
       document.dispatchEvent(new CustomEvent('moai:field-clear'));
@@ -127,11 +139,10 @@
   const imgs = {};
   Object.keys(KINDS).forEach(function(k) {
     const look = KINDS[k].look;
-    if (look && look.img) { imgs[k] = new Image(); imgs[k].onload = function() { redraw(); }; imgs[k].src = look.img; }
-    if (look && look.frames) (M.MOAI_FRAMES || []).forEach(function(f) {   // 프레임별 이미지 (이름: '종류:프레임')
-      const im = imgs[k + ':' + f] = new Image(); im.onload = function() { redraw(); }; im.src = 'assets/' + f + '.png';
-    });
+    if (look && look.img && !look.frames) { imgs[k] = new Image(); imgs[k].onload = function() { redraw(); }; imgs[k].src = look.img; }   // 프레임을 쓰는 종류는 따로 불러오지 않는다 (아래 frameImg)
   });
+  // 모아이 프레임을 쓰는 종류 (look.frames): 메인 모아이의 프레임 객체를 같이 쓴다 (js/sprite.js M.spriteImages.frames — 한 벌만 둔다. 따로 불러오지 않는다)
+  function frameImg(name) { const S = M.spriteImages; return S && S.frames ? S.frames[name] : null; }
   function loaded(img) { return !!img && img.complete && img.naturalWidth > 0; }
 
   // ── 하늘 비주얼 풀: 떠다니는 종류마다 이미지 풀 — assets/sky/<풀>/01.png ~ (SKY.slots 장) 중 있는 파일만, 등장마다 하나 뽑음 (없으면 종류의 기본 모습)
@@ -299,6 +310,10 @@
         a.vy += DROP.gravity * dt;
         a.p.y += a.vy * dt;
         a.p.x += a.dir * k.speed * 0.3 * dt;   // 떠다니던 방향으로 조금 흘러감
+        if (a.perch) {                         // 안착: 머리 높이까지 가는 동안 사라진다 (바닥에 닿지 않음)
+          a.alpha = Math.max(0, 1 - (a.p.y - a.perch.y0) / a.perch.span);
+          if (a.alpha <= 0) { despawn(a); return; }
+        }
         const half = halfH(a), dy = a.v ? a.v.dy : 0, target = Math.min(0.99, M.landTop(Math.min(1, Math.max(0, a.p.x))) + a.depth);
         if (a.p.y + dy + half >= target) { a.p.y = target - half - dy; land(a); }   // 그림 아래끝이 땅에
       } else if (a.state === 'land' || a.state === 'bloom') {
@@ -316,6 +331,14 @@
     emit('land', a);
   }
 
+  // 메인 모아이 판정 상자(layout.js MOAI_HIT — 머리 ~ 어깨)의 가로 구간 · 위 끝 (캔버스 폭 · 높이 비)
+  const PERCH = { min: 0.08 };   // 안착할 때 사라지는 거리의 하한 (캔버스 높이 비 — 머리가 새보다 높이 있을 때도 뚝 끊기지 않게)
+  function moaiSpan() {
+    if (!M.LAYOUT || !M.MOAI_HIT || !M.quadOn) return null;
+    const W = M.CANVAS_ASPECT, q = M.quadOn(M.placedRect(M.LAYOUT.moai, M.LAYOUT_ASPECT.moai, W, 1, M.moaiDy ? M.moaiDy() : 0), M.MOAI_HIT, M.LAYOUT.moai.flip);
+    const xs = q.map(function(p) { return p[0] / W; }), ys = q.map(function(p) { return p[1]; });
+    return { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs), top: Math.min.apply(null, ys) };
+  }
   // ── 누름 ──
   function tap(a) {
     if (a.k.onTap === 'drop' && a.state === 'float') {
@@ -324,14 +347,24 @@
       a.vy = 0;
       a.depth = rand(0, DROP.depth);
       emit('pop', a);
+      const span = a.k.perch && M.rewards && M.rewards.can(a.k.perch) ? moaiSpan() : null;
+      if (span && a.p.x >= span.x0 && a.p.x <= span.x1) {
+        a.perch = { y0: a.p.y, span: Math.max(PERCH.min, span.top - a.p.y) };
+        emit('perch', a);
+      }
       wake();
     } else if (a.k.onTap === 'emit') {
       if (a.stage) gardenOf(a.stage).entered = true;   // 상호작용 = 그 스테이지 경험 → 다음 계열이 열림
       emit('tap', a);
     }
   }
+  // 미니 모아이와의 상호작용이 열렸는가: 마지막 단계의 문구('TAP MINI MOAI!' — js/field-gauge.js)가 한 번이라도 뜬 뒤
+  //   왜: 연주할 때 보통 캔버스의 바깥쪽을 누르는데 미니 모아이가 바로 그 자리에 있다 — 다 드러나기 전에는 의도치 않게 세션으로 끌려 들어갔다
+  //   그 전에 미니를 누른 것은 그냥 연주 입력이다 (다른 개체를 누른 것이 아닌 것으로 친다). 게이지 모듈이 없으면 (시험 환경) 늘 열려 있다
+  function minisOpen() { return !M.fieldGauge || !M.fieldGauge.finalShown || M.fieldGauge.finalShown(); }
   function tappable(a) {
     if (a.k.interact === 'none' || a.emerging) return false;   // 세우는 중(올라오는 중)엔 안 눌림
+    if (a.kind === 'mini' && !minisOpen()) return false;       // 미니 모아이: 모두 등장하고 'TAP MINI MOAI!'가 뜬 뒤부터 (아래 minisOpen)
     return (a.k.onTap === 'drop' && a.state === 'float') || (a.k.onTap === 'emit' && a.state === 'ground');
   }
   // ── 미니 모아이: 계열 영역마다 하나 (MINI.show) — 메인 모아이 쪽을 바라봄, 자리·크기 = MINI (영역 기준 상대) ──
@@ -631,12 +664,17 @@
       maskPath(ctx, clip);
       ctx.clip(clip.mode === 'hide' ? 'evenodd' : 'nonzero');
     }
-    const img = look.frames && a.anim ? imgs[a.kind + ':' + a.anim.frame(nowSec())] : imgs[a.kind];   // 프레임이 있으면 애니메이터가 고른 것
+    // 타격 연출 (js/impact.js — 콜의 음표에 튀고, 킥에 끄덕인다): 아래 가운데를 기준으로. 마스크(가리개)는 그대로 — 몸만 움직인다
+    const ik = a.kind === 'mini' && M.impact ? M.impact.mini(a.stage) : null;
+    if (ik) { const pr = M.placedRect(a.p, asp, W, H), ay = pr.cy + pr.dh * 0.3; ctx.save(); ctx.translate(pr.cx, ay); ctx.scale(ik.sx, ik.sy); ctx.translate(-pr.cx, -ay); }
+    const rest = look.frames ? frameImg('idle') : imgs[a.kind];                                   // 대기 모습
+    const img = look.frames && a.anim ? frameImg(a.anim.frame(nowSec())) : rest;                   // 프레임이 있으면 애니메이터가 고른 것
     if (a.v && loaded(a.v.img)) M.drawAt(ctx, a.v.img, boxOf(a), asp, W, H);   // 하늘 풀 그림
     else if (look.img && loaded(img)) M.drawAt(ctx, tintOf(look, a, img), a.p, asp, W, H);
-    else if (look.img && loaded(imgs[a.kind])) M.drawAt(ctx, tintOf(look, a, imgs[a.kind]), a.p, asp, W, H);   // 그 프레임이 로드 전이면 대기 모습
+    else if (look.img && loaded(rest)) M.drawAt(ctx, tintOf(look, a, rest), a.p, asp, W, H);   // 그 프레임이 로드 전이면 대기 모습
     else if (look.draw) look.draw(ctx, M.placedRect(a.p, asp, W, H), a);
     else drawPlaceholder(ctx, M.placedRect(a.p, asp, W, H), look, a);
+    if (ik) ctx.restore();
     if (a.kind === 'mini' && a.level >= GROW.full) drawMiniStar(ctx, a, asp, W, H);
     if (clip) { ctx.restore(); if (MINI.mask.outline) drawMaskOutline(ctx, clip, a.color); }
     if (a.caption) drawCaption(ctx, M.placedRect(boxOf(a), asp, W, H), a.caption);
@@ -644,14 +682,9 @@
   }
   function drawMiniStar(ctx, a, asp, W, H) {
     const r = M.placedRect(a.p, asp, W, H);
-    const u = a.p.flip ? 0 : 0.7;
-    const dx = (u - 0.5) * r.dw * (a.p.flip ? -1 : 1);
-    const dy = (MINI_STAR.v - 0.5) * r.dh;
-    const c = Math.cos(r.rot), s = Math.sin(r.rot);
-    const x = r.cx + dx * c - dy * s - W * MINI_STAR.shiftX;
-    const hitBottomY = r.cy + dx * s + dy * c;
+    const at = M.quadOn(r, [[MINI_STAR.u, MINI_STAR.v]], a.p.flip)[0];
     const outer = H * MINI_STAR.size / 2;
-    const y = hitBottomY + outer + H * (MINI_STAR.gap - MINI_STAR.rise);
+    const x = at[0], y = at[1] + outer + H * (MINI_STAR.gap - MINI_STAR.rise);
     const alpha = a.starAlpha === undefined ? 1 : a.starAlpha;
     ctx.save();
     ctx.globalAlpha *= alpha;
@@ -772,12 +805,13 @@
     nextStage: nextStage,
     hasMini: function(stage) { return actors.some(function(a) { return a.kind === 'mini' && a.stage === stage; }); },
     garden: function(stage) { return Object.assign({}, gardenOf(stage)); },
-    kinds: KINDS,
+    kinds: KINDS, imgs: imgs,   // imgs = 종류 · 프레임별 그림 (시험용 — 바꿔 끼워 비교)
     policy: { SPAWN: SPAWN, DROP: DROP, GROW: GROW, MARKER: MARKER, ZONE: ZONE, MINI: MINI, HITBOX: HITBOX },   // 조정·시험용 (값을 바꾸면 다음 동작부터)
   };
 
+  let upClient = null;   // 방금 뗀 자리 (화면 좌표 — 메인 모아이 판정용)
   document.addEventListener('moai:press-release', function(e) {
-    upAt = null;
+    upAt = null; upClient = { x: e.detail.clientX, y: e.detail.clientY };
     const w = M.camera ? M.camera.toWorld(e.detail.clientX, e.detail.clientY) : null;   // 화면 → 월드 (카메라 역변환 — 줌해도 보이는 곳 = 눌리는 곳)
     if (w) { if (w.inside) upAt = { x: w.x, y: w.y }; return; }   // 캔버스 위에서 뗐을 때만
     const c = M.el && M.el.spriteCanvas;
@@ -792,12 +826,18 @@
     const pt = upAt;
     upAt = null;
     const tapped = pt && s === 'pah' && field ? interactAt(pt) : null;
+    // 배경 요소 (js/scenery.js — 누를 수 있는 것만: 그림의 보이는 부분): 다른 개체를 누른 것이 아니면 알린다 ('tap', actor 'scenery', id — 연결표)
+    const scn = !tapped && pt && s === 'pah' && field && M.scenery && M.scenery.hitAt ? M.scenery.hitAt(pt.x, pt.y) : null;
+    if (scn) document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'tap', actor: 'scenery', id: scn, x: pt.x, y: pt.y } }));
+    // 메인 모아이도 상호작용 개체: 다른 개체를 누른 것이 아니고 뗀 자리가 메인 모아이 위면 알린다 ('tap', actor 'moai' — 치장 탭: js/dress.js)
+    if (!tapped && !scn && pt && s === 'pah' && field && upClient && M.onMainMoai && M.onMainMoai(upClient.x, upClient.y) && !(M.moaiTouch && M.moaiTouch.dragged()))
+      document.dispatchEvent(new CustomEvent('moai:field-event', { detail: { kind: 'tap', actor: 'moai', x: pt.x, y: pt.y } }));
     if (field) mirror(s, tapped && tapped.kind === 'mini' ? tapped : null);
   });
   document.addEventListener('moai:stage-result', function(e) { grow(e.detail); });
-  document.addEventListener('moai:session', function(e) { onSession(!!e.detail.active, e.detail.family); });
+  document.addEventListener('moai:session', function(e) { onSession(!!e.detail.active, e.detail.family); updateCrownHud(); });
   document.addEventListener('keydown', function(e) {
-    if (e.code !== 'F8' || e.repeat) return;
+    if (!M.dev || e.code !== 'F8' || e.repeat) return;   // 완수 왕관 미리 보기 — 개발 공간(?dev)에서만
     e.preventDefault();
     crownPreview = !crownPreview;
     updateCrownHud();

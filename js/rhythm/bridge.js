@@ -61,9 +61,26 @@
     if (!show) return;
     var s = (w / G.W) * dpr; // 4:3 동일 비율 → 균일 축소
     barsCtx.setTransform(s, 0, 0, s, 0, 0);
-    barsCtx.globalAlpha = alpha != null ? alpha : 1;
-    G.renderGuideBars(barsCtx);
-    if (G.renderReveal) G.renderReveal(barsCtx);   // 패턴 드러내기 (막대 위 — rhythm/reveal.js)
+    var base = alpha != null ? alpha : 1;
+    function layers() {
+      barsCtx.globalAlpha = G.guideBase;
+      (G.renderGuide || G.renderGuideBars)(barsCtx);   // 가이드 비주얼 (rhythm/guide.js — 없으면 예전 막대)
+      if (G.renderReveal) G.renderReveal(barsCtx);   // 패턴 드러내기 (막대 위 — rhythm/reveal.js)
+      if (G.renderApproach) G.renderApproach(barsCtx);   // 수렴 윤곽 (그 위 — rhythm/approach.js)
+      if (G.renderFeedback) G.renderFeedback(barsCtx);   // 판정 피드백 (하트 · X · 홀드의 꼬리 — rhythm/feedback.js)
+      if (G.renderGuideFx) G.renderGuideFx(barsCtx);     // 막대의 이펙트 층 (줄의 물결 · 음표 둘레 · 마지막 음표 — rhythm/guide-fx.js)
+    }
+    // 두 줄 이상(세션)이면 줄마다 한 번씩: 지금 줄이 아닌 줄을 어둡게 먼저, 진행 마커가 있는 줄을 그 위에 (rhythm/guide.js 줄 부각)
+    var rows = G.guideRows ? G.guideRows() : null;
+    if (rows) {
+      for (var r = 0; r < rows.rows; r++) if (r !== rows.active) { G.guidePass = { row: r }; G.guideBase = base * rows.dim; layers(); }
+      G.guidePass = { row: rows.active }; G.guideBase = base; layers();
+      G.guidePass = null;
+    } else { G.guidePass = null; G.guideBase = base; layers(); }
+    G.guideBase = base;
+    barsCtx.globalAlpha = base;
+    if (G.renderGuideFxTop) G.renderGuideFxTop(barsCtx);     // 막대의 이펙트 층 — 한 번 터지는 것들 (빛기둥 · 파문 · 잔상 — rhythm/guide-fx.js)
+    if (G.renderGuideMarker) G.renderGuideMarker(barsCtx);   // 진행 마커 (맨 위 — rhythm/guide.js)
     barsCtx.globalAlpha = 1;
   };
 

@@ -139,7 +139,8 @@ window.MoaiData["missions"] = {
           "islandMini7"
         ]
       },
-      "reward": "mini"
+      "reward": "mini",
+      "bonus": "song.FIELD"
     },
     {
       "condition": {
@@ -165,6 +166,26 @@ window.MoaiData["missions"] = {
         [
           "TAP3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.TROPY"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-tap"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "scn.hhand"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -179,6 +200,26 @@ window.MoaiData["missions"] = {
         [
           "DOO3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.COMFORT"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-doo"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "acc.clown"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -193,6 +234,26 @@ window.MoaiData["missions"] = {
         [
           "MIX3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.TRASH"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-mix"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "scn.gugu"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -207,6 +268,26 @@ window.MoaiData["missions"] = {
         [
           "CPA3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.CHICK"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-cpa"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "scn.namu"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -221,6 +302,26 @@ window.MoaiData["missions"] = {
         [
           "CPB3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.PIGEON"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-cpb"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "scn.sessak"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -235,6 +336,26 @@ window.MoaiData["missions"] = {
         [
           "CPC3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.HOWTO"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-cpc"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "acc.ribbon"
+          ],
+          "when": "clear"
+        }
       ]
     },
     {
@@ -249,6 +370,26 @@ window.MoaiData["missions"] = {
         [
           "CPD3"
         ]
+      ],
+      "rewards": [
+        {
+          "give": [
+            "song.FETREE"
+          ],
+          "when": "enter"
+        },
+        {
+          "give": [
+            "scn.rainbow-cpd"
+          ],
+          "when": "clear"
+        },
+        {
+          "give": [
+            "scn.cleaf"
+          ],
+          "when": "clear"
+        }
       ]
     }
   ]
