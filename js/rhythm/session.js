@@ -773,8 +773,8 @@
 
   document.addEventListener('keydown', function(e) {
     if (e.repeat) return;
-    if (e.code === 'KeyT') { e.preventDefault(); toggle('loop'); }
-    else if (e.code === 'KeyP') { e.preventDefault(); toggle('pingpong'); }
+    if (M.dev && e.code === 'KeyT') { e.preventDefault(); toggle('loop'); }             // 루프 테스트 · 핑퐁 시작 = 시험용 — 개발 공간(?dev)에서만
+    else if (M.dev && e.code === 'KeyP') { e.preventDefault(); toggle('pingpong'); }
     else if (e.code === 'Escape' && M.sessionActive) { e.preventDefault(); stop(); }
   });
 

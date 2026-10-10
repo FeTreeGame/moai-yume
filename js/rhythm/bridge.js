@@ -106,7 +106,7 @@
   }
 
   document.addEventListener('keydown', function(e) {
-    if (e.repeat) return;
+    if (e.repeat || !M.dev) return;                 // 자동 연주 = 시험용 — 개발 공간(?dev)에서만 (게시본에서 누구나 누르면 진행을 건너뛴다)
     if (e.code === 'KeyN') { e.preventDefault(); toggleAuto(); }
   });
 })();
