@@ -106,10 +106,18 @@
   };
 
   // 진행 마커 — 중심선 모양일 때만. 지금 위치(절대 칸, 소수)의 자리에
+  //   첫 박 전 (P < 0 — 곡은 조금 뒤의 시각에 첫 박이 오도록 예약된다): 자리를 막대 길이로 돌려 감으면 막대의 끝이 된다
+  //     앞에서 이어지던 것이면 (곡이 도는 중에 세션의 박으로 넘어감 — 마커가 끝을 향해 가던 중) 그 끝이 맞는 자리 → 그린다
+  //     새로 시작하는 것이면 (곡이 없다가 시작 · 멈췄다 다시 시작) 끝에서 나타났다가 첫 박에 맨 앞으로 튄다 → 첫 박까지 그리지 않는다
+  //     '이어지던 것' = 방금까지 마커를 그리고 있었다 (markerAt — 마지막으로 그린 때에서 MARK_GAP 안)
+  var markerAt = -1e9, MARK_GAP = 200;   // ms
   G.renderGuideMarker = function(ctx) {
     if (GUIDE.style !== 'line' || G.guideStill || G.currentBeat == null) return;
     var P = G.currentBeat * 4, len = lenNow(P);
     if (!len) return;
+    var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (P < 0 && now - markerAt > MARK_GAP) return;
+    markerAt = now;
     var L = lineLayout(len), M = GUIDE.marker, H = M.heart;
     var c = ((P % len) + len) % len, row = Math.min(L.rows - 1, Math.floor(c / L.row));
     var x = L.bgX + (c - row * L.row) * L.slotW, y = L.rowY(row) + L.rowH / 2;

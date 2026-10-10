@@ -4,7 +4,7 @@
 (function() {
   const M = window.Moai;
   const S = function(name, o) { return M.sfx ? M.sfx.play(name, o) : null; };
-  // 연출의 묶음 스위치: 묶음마다 켜고 끈다 (전체 스위치 IMPACT.on · J 키와는 따로 — 둘 다 켜져 있어야 나온다). 바꾸는 곳 = setFx (아래), 밖에서는 M.fxRules.fx
+  // 연출의 묶음 스위치: 묶음마다 켜고 끈다 (전체 스위치 IMPACT.on · 개발 공간의 I 키와는 따로 — 둘 다 켜져 있어야 나온다). 바꾸는 곳 = setFx (아래), 밖에서는 M.fxRules.fx
   //   beams 빛줄기 · filter 색 필터 (색 입힘 · 누르는 색 · 둘레의 어둠) · frame 테두리 · particles 파티클 (고리 · 빛살 · 하트 · 모여드는 점)
   //   bar 막대의 이펙트 · react 모아이와 세계의 반응 (튀기 · 끄덕임 · 들숨 · 들썩임) · camera 카메라 연출 (펄스 · 기울기 · 다가감)
   //   왜: 기기에서 잰 결과 연출 전체가 전력의 절반쯤을 썼고, 그중 빛줄기 · 색 필터가 유력하다 (소스 저장소 docs/RENDER-COST.md) — 묶음별로 꺼 보며 가리고, 무거운 것만 끌 수 있게
@@ -557,7 +557,7 @@
     else if (d.reason === 'fail') { S('out'); if (M.fx) M.fx.flash('rgb(0,0,0)', 0.35, 700); }
   });
 
-  // 타격 연출 끄고 켜기 (J 키 — 원래와 바로 견준다) · 세기 (개발 탭). 화면 왼쪽 위에 지금 상태를 잠깐 띄운다
+  // 타격 연출 끄고 켜기 (I 키 — 원래와 바로 견준다. 개발 공간 ?dev 에서만 — 처음에는 J였다: J는 뚜우엉의 키가 됐다) · 세기 (개발 탭). 화면 왼쪽 위에 지금 상태를 잠깐 띄운다
   const BASE = JSON.parse(JSON.stringify(IMPACT));
   let tag = null, tagTimer = null;
   function note(text) {
@@ -584,12 +584,12 @@
   }
   function sync() {
     const b = document.getElementById('devImpact'), r = document.getElementById('devImpactScale'), v = document.getElementById('devImpactScaleVal');
-    if (b) { b.classList.toggle('active', IMPACT.on); b.textContent = '타격 연출 ' + (IMPACT.on ? '켬' : '끔') + ' (J)'; }
+    if (b) { b.classList.toggle('active', IMPACT.on); b.textContent = '타격 연출 ' + (IMPACT.on ? '켬' : '끔') + ' (I)'; }
     if (r) r.value = IMPACT.scale || 1;
     if (v) v.textContent = Math.round((IMPACT.scale || 1) * 100) + '%';
   }
   document.addEventListener('keydown', function(e) {
-    if (e.repeat || e.code !== 'KeyJ' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!M.dev || e.repeat || e.code !== 'KeyI' || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target, n = t && t.tagName;
     if (n === 'INPUT' || n === 'TEXTAREA' || n === 'SELECT') return;
     e.preventDefault(); setImpact(!IMPACT.on);

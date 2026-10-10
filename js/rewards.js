@@ -7,7 +7,7 @@
 //     give의 카드들은 같은 순간에 같이 준다 (받침 + 물체 세트). 옛 형식 [1단계 카드, 2단계, 3단계] (문자열 · null)도 읽는다 = when이 그 단계 번호
 //     때가 되면 기록만 하고 (세션 들어감 'moai:session' · 단계 성공 'moai:stage-step' — 핑퐁), 세션이 끝나면(필드로 돌아오면) 기록한 것을 SESSION.delay초 뒤 차례로 준다
 //       (세션 중엔 카메라가 미니·투샷을 봐서 배경 변화가 묻힘 — 끝나고 그 자리에서 페이드인). 항목마다 한 번만 (다시 해도 다시 주지 않음)
-//   모두 해금 (시험 — 보상의 순서를 정하려고): ALL.key 키 = 세션 보상 표의 카드를 표의 차례(계열 → 단계)대로 전부 그 자리에서 준다 + ALL.extra (표에 아직 없는 것)
+//   모두 해금 (시험 — 보상의 순서를 정하려고. 개발 공간 ?dev 에서만): ALL.key 키 = 세션 보상 표의 카드를 표의 차례(계열 → 단계)대로 전부 그 자리에서 준다 + ALL.extra (표에 아직 없는 것)
 //     받은 것으로 기록하므로 그 뒤에 세션을 깨도 다시 나오지 않는다. 이미 받은 카드는 건너뛴다 (카드의 can)
 //   알림: document 'moai:field-event' { kind: 'reward', actor: 'session', card, family, stage } — 세션 보상을 준 때 (필드 미션은 진행 표가 actor 'progress'로)
 (function() {
@@ -76,7 +76,7 @@
     return out;
   }
   document.addEventListener('keydown', function(e) {
-    if (e.repeat || e.code !== ALL.key || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!M.dev || e.repeat || e.code !== ALL.key || e.ctrlKey || e.metaKey || e.altKey) return;   // 개발 공간(?dev)에서만 — 게시본에서 누구나 누르면 진행을 건너뛴다
     const t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     e.preventDefault(); grantAll();

@@ -6,10 +6,11 @@
   var M = window.Moai;
 
   // === 누른 주체 식별: 홀드는 누른 주체의 뗌으로만 릴리즈 ===
-  // 'key' | 'mouse' | 't<identifier>' (터치는 손가락별 번호)
+  // 'key:<code>' | 'mouse' | 't<identifier>' (터치는 손가락별 번호 · 키는 키별 — 같은 동작이 여러 키에 걸려 있어, 누른 그 키를 떼야 끝난다. 옆 키를 스쳐도 홀드가 끊기지 않게)
+  function keyOwner(e) { return 'key:' + (e.code || ''); }
   function pressOwner(e) {
     if (e.changedTouches) return 't' + e.changedTouches[0].identifier;
-    return e.type.indexOf('key') === 0 ? 'key' : 'mouse';
+    return e.type.indexOf('key') === 0 ? keyOwner(e) : 'mouse';
   }
   function isOwnerUp(e, owner) {
     if (e.changedTouches) {
@@ -18,7 +19,7 @@
       }
       return false;
     }
-    return (e.type.indexOf('key') === 0 ? 'key' : 'mouse') === owner;
+    return (e.type.indexOf('key') === 0 ? keyOwner(e) : 'mouse') === owner;
   }
 
   // === 단일 입력 (press/release → 떽/뚜우엉 분기) ===
@@ -184,10 +185,12 @@
     });
   };
 
-  // 키 맵핑: e.code → 드로어 입력 영역 1:1 대응
+  // 키 맵핑: e.code → 입력. 같은 입력을 여러 키에 건다 — 주력은 D (떽) · K (뚜우엉): 화면 버튼의 키 표시 (index.html .play-key)
+  //   왼손 S D F = 떽 / 오른손 J K L = 뚜우엉. Z X C는 처음부터의 키 (그대로)
+  var TAP = { down: onOrigTapDown, up: onOrigTapUp }, HOLD = { down: onOrigHoldDown, up: onOrigHoldUp };
   var KEY_MAP = {
     KeyC:  { down: onOrigDown,     up: onOrigUp },     // 단일 (짧게 떽 / 길게 뚜우엉)
-    KeyZ:  { down: onOrigTapDown,  up: onOrigTapUp },  // 떽
-    KeyX:  { down: onOrigHoldDown, up: onOrigHoldUp }, // 뚜우엉
+    KeyZ: TAP, KeyS: TAP, KeyD: TAP, KeyF: TAP,        // 떽
+    KeyX: HOLD, KeyJ: HOLD, KeyK: HOLD, KeyL: HOLD,    // 뚜우엉
   };
 })();
